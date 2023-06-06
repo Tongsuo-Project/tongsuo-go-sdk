@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build openssl_static
+//go:build static
+// +build static
 
-package openssl
+package tongsuogo
 
-// #cgo linux windows pkg-config: --static libssl libcrypto
-// #cgo linux CFLAGS: -Wno-deprecated-declarations
-// #cgo darwin CFLAGS: -I/usr/local/opt/openssl@1.1/include -I/usr/local/opt/openssl/include -Wno-deprecated-declarations
-// #cgo darwin LDFLAGS: -L/usr/local/opt/openssl@1.1/lib -L/usr/local/opt/openssl/lib -lssl -lcrypto
+// #cgo linux CFLAGS: -Wno-deprecated-declarations -I/opt/tongsuo/include
+// #cgo linux LDFLAGS: -extldflags -static -L/opt/tongsuo/lib  -lssl -lcrypto
+// #cgo darwin CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
+// #cgo darwin LDFLAGS: -L/opt/tongsuo/lib -lssl -lcrypto
 // #cgo windows CFLAGS: -DWIN32_LEAN_AND_MEAN
+// #cgo windows pkg-config: libssl libcrypto
 import "C"

@@ -1,3 +1,7 @@
-module github.com/spacemonkeygo/openssl
+module github.com/tongsuo-project/tongsuo-go-sdk
 
-require github.com/spacemonkeygo/spacelog v0.0.0-20180420211403-2296661a0572
+go 1.19
+
+require github.com/tjfoc/gmsm v1.4.1
+
+replace github.com/tongsuo-project/tongsuo-go-sdk/utils => ./utils

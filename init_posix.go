@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build (linux || darwin || solaris) && !windows
 // +build linux darwin solaris
 // +build !windows
 
-package openssl
+package tongsuogo
 
 /*
 #include <errno.h>
