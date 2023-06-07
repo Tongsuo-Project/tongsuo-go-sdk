@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openssl
+package tongsuogo
 
 // #include "shim.h"
 import "C"
@@ -122,7 +122,7 @@ func go_ticket_key_cb_thunk(p unsafe.Pointer, s *C.SSL, key_name *C.uchar,
 	// so just abort everything.
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Critf("openssl: ticket key callback panic'd: %v", err)
+			//logger.Critf("openssl: ticket key callback panic'd: %v", err)
 			os.Exit(1)
 		}
 	}()

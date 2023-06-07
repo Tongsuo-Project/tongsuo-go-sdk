@@ -58,6 +58,11 @@ extern const SSL_METHOD *X_SSLv3_method();
 extern const SSL_METHOD *X_TLSv1_method();
 extern const SSL_METHOD *X_TLSv1_1_method();
 extern const SSL_METHOD *X_TLSv1_2_method();
+#ifdef BABASSL_VERSION_NUMBER
+extern const SSL_METHOD *X_NTLS_method();
+extern const SSL_METHOD *X_NTLS_client_method();
+extern const SSL_METHOD *X_NTLS_server_method();
+#endif
 
 #if defined SSL_CTRL_SET_TLSEXT_HOSTNAME
 extern int sni_cb(SSL *ssl_conn, int *ad, void *arg);
@@ -66,6 +71,9 @@ extern int X_SSL_verify_cb(int ok, X509_STORE_CTX* store);
 
 /* SSL_CTX methods */
 extern int X_SSL_CTX_new_index();
+#ifdef BABASSL_VERSION_NUMBER
+extern void X_SSL_CTX_enable_ntls(SSL_CTX* ctx);
+#endif
 extern long X_SSL_CTX_set_options(SSL_CTX* ctx, long options);
 extern long X_SSL_CTX_clear_options(SSL_CTX* ctx, long options);
 extern long X_SSL_CTX_get_options(SSL_CTX* ctx);
@@ -106,6 +114,7 @@ extern const int X_ED25519_SUPPORT;
 extern int X_EVP_PKEY_ED25519;
 extern const EVP_MD *X_EVP_get_digestbyname(const char *name);
 extern EVP_MD_CTX *X_EVP_MD_CTX_new();
+extern int X_EVP_MD_CTX_copy_ex(EVP_MD_CTX *out, const EVP_MD_CTX *in);
 extern void X_EVP_MD_CTX_free(EVP_MD_CTX *ctx);
 extern const EVP_MD *X_EVP_md_null();
 extern const EVP_MD *X_EVP_md5();
@@ -119,6 +128,9 @@ extern const EVP_MD *X_EVP_sha224();
 extern const EVP_MD *X_EVP_sha256();
 extern const EVP_MD *X_EVP_sha384();
 extern const EVP_MD *X_EVP_sha512();
+#ifdef BABASSL_VERSION_NUMBER
+extern const EVP_MD *X_EVP_sm3();
+#endif
 extern int X_EVP_MD_size(const EVP_MD *md);
 extern int X_EVP_DigestInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl);
 extern int X_EVP_DigestUpdate(EVP_MD_CTX *ctx, const void *d, size_t cnt);
@@ -127,6 +139,7 @@ extern int X_EVP_SignInit(EVP_MD_CTX *ctx, const EVP_MD *type);
 extern int X_EVP_SignUpdate(EVP_MD_CTX *ctx, const void *d, unsigned int cnt);
 extern int X_EVP_DigestSignInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx, const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey);
 extern int X_EVP_DigestSign(EVP_MD_CTX *ctx, unsigned char *sigret, size_t *siglen, const unsigned char *tbs, size_t tbslen);
+extern int X_EVP_Digest(const void *data, size_t count, unsigned char *md, unsigned int *size, const EVP_MD *type, ENGINE *impl);
 extern EVP_PKEY *X_EVP_PKEY_new(void);
 extern void X_EVP_PKEY_free(EVP_PKEY *pkey);
 extern int X_EVP_PKEY_size(EVP_PKEY *pkey);
