@@ -27,7 +27,7 @@ jobs:
       with:
         repository: Tongsuo-Project/Tongsuo
         path: tongsuo
-        ref: 8.3.2
+        ref: 8.3-stable
 
     - name: Build  Tongsuo
       run: cd tongsuo &&  ./config --prefix=/opt/tongsuo -Wl,-rpath,/opt/tongsuo/lib  enable-ec_elgamal enable-ntls && make -j && make install

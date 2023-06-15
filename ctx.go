@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"runtime"
 	"sync"
@@ -109,7 +108,6 @@ func NewCtxWithVersion(version SSLVersion) (*Ctx, error) {
 	}
 
 	if enableNTLS {
-		log.Println("enable ntls")
 		C.X_SSL_CTX_enable_ntls(c.ctx)
 	}
 
