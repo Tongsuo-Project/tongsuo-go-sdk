@@ -30,10 +30,13 @@ jobs:
         ref: 8.3-stable
 
     - name: Build  Tongsuo
-      run: cd tongsuo &&  ./config --prefix=/opt/tongsuo -Wl,-rpath,/opt/tongsuo/lib  enable-ec_elgamal enable-ntls && make -j && make install
+      run: cd tongsuo &&  ./config --prefix=/opt/tongsuo -Wl,-rpath,/opt/tongsuo/lib  enable-ssl-trace enable-ec_elgamal enable-ntls && make -j && make install
 
     - name: Check Tongsuo lib
       run: ls /opt/tongsuo/lib
+
+    - name: Check Tongsuo binary
+      run: ldd /opt/tongsuo/bin/openssl 
 
     - name: Go Mod
       run: go mod tidy
@@ -44,8 +47,14 @@ jobs:
     - name: Build
       run: go build
 
+    - name: s_server help
+      run: /opt/tongsuo/bin/openssl s_server --help 
+
     - name: Setup test
-      run: /opt/tongsuo/bin/openssl s_server -accept 127.0.0.1:4433 -enc_cert tongsuo/test_certs/double_cert/SE.cert.pem -enc_key tongsuo/test_certs/double_cert/SE.key.pem -sign_cert tongsuo/test_certs/double_cert/SS.cert.pem -sign_key tongsuo/test_certs/double_cert/SS.key.pem -enable_ntls
+      run: nohup /opt/tongsuo/bin/openssl s_server -accept 127.0.0.1:4433 -enc_cert tongsuo/test_certs/double_cert/SE.cert.pem -enc_key tongsuo/test_certs/double_cert/SE.key.pem -sign_cert tongsuo/test_certs/double_cert/SS.cert.pem -sign_key tongsuo/test_certs/double_cert/SS.key.pem -enable_ntls -trace &
 
     - name: Test
       run: go test -exec "env LD_LIBRARY_PATH=/opt/tongsuo/lib" ./...
+
+    - name: server log
+      run: cat nohup.out

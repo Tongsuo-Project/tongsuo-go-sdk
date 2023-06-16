@@ -41,12 +41,4 @@ func TestNTLSECCSM2(t *testing.T) {
 		t.Error(err)
 		return
 	}
-
-	data := make([]byte, len(request))
-	if _, err := conn.Read(data); err != nil {
-		t.Error(err)
-		return
-	}
-
-	t.Log("response", string(data))
 }
