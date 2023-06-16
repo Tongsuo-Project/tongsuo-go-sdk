@@ -46,5 +46,6 @@ jobs:
 
     - name: Setup test
       run: /opt/tongsuo/bin/openssl s_server -accept 127.0.0.1:4433 -enc_cert tongsuo/test_certs/double_cert/SE.cert.pem -enc_key tongsuo/test_certs/double_cert/SE.key.pem -sign_cert tongsuo/test_certs/double_cert/SS.cert.pem -sign_key tongsuo/test_certs/double_cert/SS.key.pem -enable_ntls
+
     - name: Test
       run: go test -exec "env LD_LIBRARY_PATH=/opt/tongsuo/lib" ./...
