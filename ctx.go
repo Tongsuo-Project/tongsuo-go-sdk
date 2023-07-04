@@ -33,12 +33,16 @@ var (
 )
 
 type Ctx struct {
-	ctx       *C.SSL_CTX
-	cert      *Certificate
-	chain     []*Certificate
+	ctx   *C.SSL_CTX
+	cert  *Certificate
+	chain []*Certificate
+
 	key       PrivateKey
 	verify_cb VerifyCallback
 	sni_cb    TLSExtServernameCallback
+
+	encCert *Certificate
+	encKey  PrivateKey
 
 	ticket_store_mu sync.Mutex
 	ticket_store    *TicketStore
@@ -212,6 +216,30 @@ func (c *Ctx) SetEllipticCurve(curve EllipticCurve) error {
 	return nil
 }
 
+// UseSignCertificate configures the context to present the given sign certificate to
+// peers.
+func (c *Ctx) UseSignCertificate(cert *Certificate) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	c.cert = cert
+	if int(C.SSL_CTX_use_sign_certificate(c.ctx, cert.x)) != 1 {
+		return errorFromErrorQueue()
+	}
+	return nil
+}
+
+// UseEncryptCertificate configures the context to present the given encrypt certificate to
+// peers.
+func (c *Ctx) UseEncryptCertificate(cert *Certificate) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	c.encCert = cert
+	if int(C.SSL_CTX_use_enc_certificate(c.ctx, cert.x)) != 1 {
+		return errorFromErrorQueue()
+	}
+	return nil
+}
+
 // UseCertificate configures the context to present the given certificate to
 // peers.
 func (c *Ctx) UseCertificate(cert *Certificate) error {
@@ -235,6 +263,30 @@ func (c *Ctx) AddChainCertificate(cert *Certificate) error {
 	}
 	// OpenSSL takes ownership via SSL_CTX_add_extra_chain_cert
 	runtime.SetFinalizer(cert, nil)
+	return nil
+}
+
+// UseSignPrivateKey configures the context to use the given sign private key for SSL
+// handshakes.
+func (c *Ctx) UseSignPrivateKey(key PrivateKey) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	c.key = key
+	if int(C.SSL_CTX_use_sign_PrivateKey(c.ctx, key.evpPKey())) != 1 {
+		return errorFromErrorQueue()
+	}
+	return nil
+}
+
+// UseEncryptPrivateKey configures the context to use the given encrypt private key for SSL
+// handshakes.
+func (c *Ctx) UseEncryptPrivateKey(key PrivateKey) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	c.encKey = key
+	if int(C.SSL_CTX_use_enc_PrivateKey(c.ctx, key.evpPKey())) != 1 {
+		return errorFromErrorQueue()
+	}
 	return nil
 }
 
