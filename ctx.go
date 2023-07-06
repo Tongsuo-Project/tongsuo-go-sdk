@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openssl
+package tongsuogo
 
 // #include "shim.h"
 import "C"
@@ -26,23 +26,23 @@ import (
 	"sync"
 	"time"
 	"unsafe"
-
-	"github.com/spacemonkeygo/spacelog"
 )
 
 var (
 	ssl_ctx_idx = C.X_SSL_CTX_new_index()
-
-	logger = spacelog.GetLogger()
 )
 
 type Ctx struct {
-	ctx       *C.SSL_CTX
-	cert      *Certificate
-	chain     []*Certificate
+	ctx   *C.SSL_CTX
+	cert  *Certificate
+	chain []*Certificate
+
 	key       PrivateKey
 	verify_cb VerifyCallback
 	sni_cb    TLSExtServernameCallback
+
+	encCert *Certificate
+	encKey  PrivateKey
 
 	ticket_store_mu sync.Mutex
 	ticket_store    *TicketStore
@@ -61,7 +61,7 @@ func newCtx(method *C.SSL_METHOD) (*Ctx, error) {
 		return nil, errorFromErrorQueue()
 	}
 	c := &Ctx{ctx: ctx}
-	C.SSL_CTX_set_ex_data(ctx, get_ssl_ctx_idx(), unsafe.Pointer(c))
+	C.SSL_CTX_set_ex_data(ctx, get_ssl_ctx_idx(), unsafe.Pointer(c.ctx))
 	runtime.SetFinalizer(c, func(c *Ctx) {
 		C.SSL_CTX_free(c.ctx)
 	})
@@ -75,15 +75,17 @@ const (
 	TLSv1   SSLVersion = 0x03
 	TLSv1_1 SSLVersion = 0x04
 	TLSv1_2 SSLVersion = 0x05
+	NTLS    SSLVersion = 0x06
 
 	// Make sure to disable SSLv2 and SSLv3 if you use this. SSLv3 is vulnerable
 	// to the "POODLE" attack, and SSLv2 is what, just don't even.
-	AnyVersion SSLVersion = 0x06
+	AnyVersion SSLVersion = 0x01
 )
 
 // NewCtxWithVersion creates an SSL context that is specific to the provided
 // SSL version. See http://www.openssl.org/docs/ssl/SSL_CTX_new.html for more.
 func NewCtxWithVersion(version SSLVersion) (*Ctx, error) {
+	var enableNTLS bool
 	var method *C.SSL_METHOD
 	switch version {
 	case SSLv3:
@@ -94,13 +96,26 @@ func NewCtxWithVersion(version SSLVersion) (*Ctx, error) {
 		method = C.X_TLSv1_1_method()
 	case TLSv1_2:
 		method = C.X_TLSv1_2_method()
+	case NTLS:
+		method = C.X_NTLS_method()
+		enableNTLS = true
 	case AnyVersion:
 		method = C.X_SSLv23_method()
 	}
 	if method == nil {
 		return nil, errors.New("unknown ssl/tls version")
 	}
-	return newCtx(method)
+
+	c, err := newCtx(method)
+	if err != nil {
+		return nil, err
+	}
+
+	if enableNTLS {
+		C.X_SSL_CTX_enable_ntls(c.ctx)
+	}
+
+	return c, nil
 }
 
 // NewCtx creates a context that supports any TLS version 1.0 and newer.
@@ -201,6 +216,30 @@ func (c *Ctx) SetEllipticCurve(curve EllipticCurve) error {
 	return nil
 }
 
+// UseSignCertificate configures the context to present the given sign certificate to
+// peers.
+func (c *Ctx) UseSignCertificate(cert *Certificate) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	c.cert = cert
+	if int(C.SSL_CTX_use_sign_certificate(c.ctx, cert.x)) != 1 {
+		return errorFromErrorQueue()
+	}
+	return nil
+}
+
+// UseEncryptCertificate configures the context to present the given encrypt certificate to
+// peers.
+func (c *Ctx) UseEncryptCertificate(cert *Certificate) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	c.encCert = cert
+	if int(C.SSL_CTX_use_enc_certificate(c.ctx, cert.x)) != 1 {
+		return errorFromErrorQueue()
+	}
+	return nil
+}
+
 // UseCertificate configures the context to present the given certificate to
 // peers.
 func (c *Ctx) UseCertificate(cert *Certificate) error {
@@ -224,6 +263,30 @@ func (c *Ctx) AddChainCertificate(cert *Certificate) error {
 	}
 	// OpenSSL takes ownership via SSL_CTX_add_extra_chain_cert
 	runtime.SetFinalizer(cert, nil)
+	return nil
+}
+
+// UseSignPrivateKey configures the context to use the given sign private key for SSL
+// handshakes.
+func (c *Ctx) UseSignPrivateKey(key PrivateKey) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	c.key = key
+	if int(C.SSL_CTX_use_sign_PrivateKey(c.ctx, key.evpPKey())) != 1 {
+		return errorFromErrorQueue()
+	}
+	return nil
+}
+
+// UseEncryptPrivateKey configures the context to use the given encrypt private key for SSL
+// handshakes.
+func (c *Ctx) UseEncryptPrivateKey(key PrivateKey) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	c.encKey = key
+	if int(C.SSL_CTX_use_enc_PrivateKey(c.ctx, key.evpPKey())) != 1 {
+		return errorFromErrorQueue()
+	}
 	return nil
 }
 
@@ -426,7 +489,8 @@ type VerifyCallback func(ok bool, store *CertificateStoreCtx) bool
 func go_ssl_ctx_verify_cb_thunk(p unsafe.Pointer, ok C.int, ctx *C.X509_STORE_CTX) C.int {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Critf("openssl: verify callback panic'd: %v", err)
+			// TODO logger
+			//logger.Critf("openssl: verify callback panic'd: %v", err)
 			os.Exit(1)
 		}
 	}()

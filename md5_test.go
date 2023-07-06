@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openssl
+package tongsuogo
 
 import (
 	"crypto/md5"
@@ -28,11 +28,11 @@ func TestMD5(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		expected := md5.Sum(buf)
-		got, err := MD5(buf)
-		if err != nil {
-			t.Fatal(err)
-		}
+		var got, expected [MD5_DIGEST_LENGTH]byte
+
+		s := md5.Sum(buf)
+		got = MD5Sum(buf)
+		copy(expected[:], s[:MD5_DIGEST_LENGTH])
 
 		if expected != got {
 			t.Fatalf("exp:%x got:%x", expected, got)
@@ -48,9 +48,7 @@ func TestMD5Writer(t *testing.T) {
 	hash := md5.New()
 
 	for i := 0; i < 100; i++ {
-		if err := ohash.Reset(); err != nil {
-			t.Fatal(err)
-		}
+		ohash.Reset()
 		hash.Reset()
 		buf := make([]byte, 10*1024-i)
 		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
@@ -64,13 +62,10 @@ func TestMD5Writer(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var got, exp [16]byte
+		var got, exp [MD5_DIGEST_LENGTH]byte
 
 		hash.Sum(exp[:0])
-		got, err := ohash.Sum()
-		if err != nil {
-			t.Fatal(err)
-		}
+		ohash.Sum(got[:0])
 
 		if got != exp {
 			t.Fatalf("exp:%x got:%x", exp, got)
@@ -93,15 +88,23 @@ func benchmarkMD5(b *testing.B, length int64, fn md5func) {
 }
 
 func BenchmarkMD5Large_openssl(b *testing.B) {
-	benchmarkMD5(b, 1024*1024, func(buf []byte) { MD5(buf) })
+	benchmarkMD5(b, 1024*1024, func(buf []byte) { MD5Sum(buf) })
 }
 
 func BenchmarkMD5Large_stdlib(b *testing.B) {
 	benchmarkMD5(b, 1024*1024, func(buf []byte) { md5.Sum(buf) })
 }
 
+func BenchmarkMD5Normal_openssl(b *testing.B) {
+	benchmarkMD5(b, 1024, func(buf []byte) { MD5Sum(buf) })
+}
+
+func BenchmarkMD5Normal_stdlib(b *testing.B) {
+	benchmarkMD5(b, 1024, func(buf []byte) { md5.Sum(buf) })
+}
+
 func BenchmarkMD5Small_openssl(b *testing.B) {
-	benchmarkMD5(b, 1, func(buf []byte) { MD5(buf) })
+	benchmarkMD5(b, 1, func(buf []byte) { MD5Sum(buf) })
 }
 
 func BenchmarkMD5Small_stdlib(b *testing.B) {

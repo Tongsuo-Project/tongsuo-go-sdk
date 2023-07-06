@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build tongsuo
-
-package openssl
+package tongsuogo
 
 import (
 	"crypto/rand"

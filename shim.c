@@ -40,6 +40,19 @@ static int go_write_bio_puts(BIO *b, const char *str) {
 
 /*
  ************************************************
+ * Tongsuo 8.3.2 or prior
+ ************************************************
+ */
+
+#ifdef BABASSL_VERSION_NUMBER
+const EVP_MD *X_EVP_sm3() {
+       return EVP_sm3();
+}
+#endif
+
+
+/*
+ ************************************************
  * v1.1.1 and later implementation
  ************************************************
  */
@@ -47,6 +60,14 @@ static int go_write_bio_puts(BIO *b, const char *str) {
 
 const int X_ED25519_SUPPORT = 1;
 int X_EVP_PKEY_ED25519 = EVP_PKEY_ED25519;
+
+
+
+int X_EVP_Digest(const void *data, size_t count,
+		unsigned char *md, unsigned int *size,
+		const EVP_MD *type, ENGINE *impl){
+	return EVP_Digest(data, count, md, size, type, impl);
+}
 
 int X_EVP_DigestSignInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx,
 		const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey){
@@ -114,6 +135,10 @@ void* X_BIO_get_data(BIO* bio) {
 
 EVP_MD_CTX* X_EVP_MD_CTX_new() {
 	return EVP_MD_CTX_new();
+}
+
+int X_EVP_MD_CTX_copy_ex(EVP_MD_CTX *out, const EVP_MD_CTX *in) {
+	return EVP_MD_CTX_copy_ex(out, in);
 }
 
 void X_EVP_MD_CTX_free(EVP_MD_CTX* ctx) {
@@ -443,6 +468,7 @@ const SSL_METHOD *X_SSLv23_method() {
 	return SSLv23_method();
 }
 
+
 const SSL_METHOD *X_SSLv3_method() {
 #ifndef OPENSSL_NO_SSL3_METHOD
 	return SSLv3_method();
@@ -471,8 +497,22 @@ const SSL_METHOD *X_TLSv1_2_method() {
 #endif
 }
 
+const SSL_METHOD *X_NTLS_method() {
+	return NTLS_method();
+}
+const SSL_METHOD *X_NTLS_client_method() {
+	return NTLS_client_method();
+}
+const SSL_METHOD *X_NTLS_server_method() {
+	return NTLS_server_method();
+}
+
 int X_SSL_CTX_new_index() {
 	return SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL);
+}
+
+void X_SSL_CTX_enable_ntls(SSL_CTX* ctx) {
+	return SSL_CTX_enable_ntls(ctx);
 }
 
 long X_SSL_CTX_set_options(SSL_CTX* ctx, long options) {
@@ -602,6 +642,7 @@ const EVP_MD *X_EVP_md5() {
 	return EVP_md5();
 }
 
+#ifndef TONGSUO_VERSION_NUMBER
 const EVP_MD *X_EVP_md4() {
 	return EVP_md4();
 }
@@ -609,6 +650,7 @@ const EVP_MD *X_EVP_md4() {
 const EVP_MD *X_EVP_ripemd160() {
 	return EVP_ripemd160();
 }
+#endif
 
 const EVP_MD *X_EVP_sha224() {
 	return EVP_sha224();

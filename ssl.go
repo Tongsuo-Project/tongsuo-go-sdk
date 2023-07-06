@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package openssl
+package tongsuogo
 
 // #include "shim.h"
 import "C"
@@ -49,7 +49,7 @@ type SSL struct {
 func go_ssl_verify_cb_thunk(p unsafe.Pointer, ok C.int, ctx *C.X509_STORE_CTX) C.int {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Critf("openssl: verify callback panic'd: %v", err)
+			//logger.Critf("openssl: verify callback panic'd: %v", err)
 			os.Exit(1)
 		}
 	}()
@@ -154,7 +154,7 @@ func (s *SSL) SetSSLCtx(ctx *Ctx) {
 func sni_cb_thunk(p unsafe.Pointer, con *C.SSL, ad unsafe.Pointer, arg unsafe.Pointer) C.int {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Critf("openssl: verify callback sni panic'd: %v", err)
+			//logger.Critf("openssl: verify callback sni panic'd: %v", err)
 			os.Exit(1)
 		}
 	}()
@@ -163,7 +163,7 @@ func sni_cb_thunk(p unsafe.Pointer, con *C.SSL, ad unsafe.Pointer, arg unsafe.Po
 
 	s := &SSL{ssl: con}
 	// This attaches a pointer to our SSL struct into the SNI callback.
-	C.SSL_set_ex_data(s.ssl, get_ssl_idx(), unsafe.Pointer(s))
+	C.SSL_set_ex_data(s.ssl, get_ssl_idx(), unsafe.Pointer(s.ssl))
 
 	// Note: this is ctx.sni_cb, not C.sni_cb
 	return C.int(sni_cb(s))
