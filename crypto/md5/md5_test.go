@@ -12,28 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package md5
 
 import (
+	"crypto/md5"
 	"crypto/rand"
 	"io"
 	"testing"
-
-	"github.com/tjfoc/gmsm/sm3"
 )
 
-func TestSM3(t *testing.T) {
+func TestMD5(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		buf := make([]byte, 10*1024-i)
 		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
 			t.Fatal(err)
 		}
 
-		var got, expected [SM3_DIGEST_LENGTH]byte
+		var got, expected [MD5_DIGEST_LENGTH]byte
 
-		s := sm3.Sm3Sum(buf)
-		got = SM3Sum(buf)
-		copy(expected[:], s[:SM3_DIGEST_LENGTH])
+		s := md5.Sum(buf)
+		got = Sum(buf)
+		copy(expected[:], s[:MD5_DIGEST_LENGTH])
 
 		if expected != got {
 			t.Fatalf("exp:%x got:%x", expected, got)
@@ -41,12 +40,12 @@ func TestSM3(t *testing.T) {
 	}
 }
 
-func TestSM3Writer(t *testing.T) {
-	ohash, err := NewSM3Hash()
+func TestMD5Writer(t *testing.T) {
+	ohash, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	hash := sm3.New()
+	hash := md5.New()
 
 	for i := 0; i < 100; i++ {
 		ohash.Reset()
@@ -63,7 +62,7 @@ func TestSM3Writer(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var got, exp [SM3_DIGEST_LENGTH]byte
+		var got, exp [MD5_DIGEST_LENGTH]byte
 
 		hash.Sum(exp[:0])
 		ohash.Sum(got[:0])
@@ -74,9 +73,9 @@ func TestSM3Writer(t *testing.T) {
 	}
 }
 
-type sm3func func([]byte)
+type md5func func([]byte)
 
-func benchmarkSM3(b *testing.B, length int64, fn sm3func) {
+func benchmarkMD5(b *testing.B, length int64, fn md5func) {
 	buf := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, buf); err != nil {
 		b.Fatal(err)
@@ -88,26 +87,26 @@ func benchmarkSM3(b *testing.B, length int64, fn sm3func) {
 	}
 }
 
-func BenchmarkSM3Large_openssl(b *testing.B) {
-	benchmarkSM3(b, 1024*1024, func(buf []byte) { SM3Sum(buf) })
+func BenchmarkMD5Large_openssl(b *testing.B) {
+	benchmarkMD5(b, 1024*1024, func(buf []byte) { Sum(buf) })
 }
 
-func BenchmarkSM3Large_stdlib(b *testing.B) {
-	benchmarkSM3(b, 1024*1024, func(buf []byte) { sm3.Sm3Sum(buf) })
+func BenchmarkMD5Large_stdlib(b *testing.B) {
+	benchmarkMD5(b, 1024*1024, func(buf []byte) { md5.Sum(buf) })
 }
 
-func BenchmarkSM3Normal_openssl(b *testing.B) {
-	benchmarkSM3(b, 1024, func(buf []byte) { SM3Sum(buf) })
+func BenchmarkMD5Normal_openssl(b *testing.B) {
+	benchmarkMD5(b, 1024, func(buf []byte) { Sum(buf) })
 }
 
-func BenchmarkSM3Normal_stdlib(b *testing.B) {
-	benchmarkSM3(b, 1024, func(buf []byte) { sm3.Sm3Sum(buf) })
+func BenchmarkMD5Normal_stdlib(b *testing.B) {
+	benchmarkMD5(b, 1024, func(buf []byte) { md5.Sum(buf) })
 }
 
-func BenchmarkSM3Small_openssl(b *testing.B) {
-	benchmarkSM3(b, 1, func(buf []byte) { SM3Sum(buf) })
+func BenchmarkMD5Small_openssl(b *testing.B) {
+	benchmarkMD5(b, 1, func(buf []byte) { Sum(buf) })
 }
 
-func BenchmarkSM3Small_stdlib(b *testing.B) {
-	benchmarkSM3(b, 1, func(buf []byte) { sm3.Sm3Sum(buf) })
+func BenchmarkMD5Small_stdlib(b *testing.B) {
+	benchmarkMD5(b, 1, func(buf []byte) { md5.Sum(buf) })
 }

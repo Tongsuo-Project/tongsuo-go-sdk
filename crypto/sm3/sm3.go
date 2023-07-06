@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package sm3
 
-// #include "shim.h"
+// #include "../../shim.h"
 import "C"
 
 import (
@@ -22,6 +22,8 @@ import (
 	"hash"
 	"runtime"
 	"unsafe"
+
+	tongsuogo "github.com/tongsuo-project/tongsuo-go-sdk"
 )
 
 const (
@@ -29,17 +31,17 @@ const (
 	SM3_CBLOCK        = 64
 )
 
-var _ hash.Hash = new(SM3Hash)
+var _ hash.Hash = new(SM3)
 
-type SM3Hash struct {
+type SM3 struct {
 	ctx    *C.EVP_MD_CTX
-	engine *Engine
+	engine *tongsuogo.Engine
 }
 
-func NewSM3Hash() (*SM3Hash, error) { return NewSM3HashWithEngine(nil) }
+func New() (*SM3, error) { return NewWithEngine(nil) }
 
-func NewSM3HashWithEngine(e *Engine) (*SM3Hash, error) {
-	h, err := newSM3HashWithEngine(e)
+func NewWithEngine(e *tongsuogo.Engine) (*SM3, error) {
+	h, err := newWithEngine(e)
 	if err != nil {
 		return nil, err
 	}
@@ -47,36 +49,36 @@ func NewSM3HashWithEngine(e *Engine) (*SM3Hash, error) {
 	return h, nil
 }
 
-func newSM3HashWithEngine(e *Engine) (*SM3Hash, error) {
-	hash := &SM3Hash{engine: e}
+func newWithEngine(e *tongsuogo.Engine) (*SM3, error) {
+	hash := &SM3{engine: e}
 	hash.ctx = C.X_EVP_MD_CTX_new()
 	if hash.ctx == nil {
 		return nil, errors.New("openssl: sm3: unable to allocate ctx")
 	}
-	runtime.SetFinalizer(hash, func(hash *SM3Hash) { hash.Close() })
+	runtime.SetFinalizer(hash, func(hash *SM3) { hash.Close() })
 	return hash, nil
 }
 
-func (s *SM3Hash) BlockSize() int {
+func (s *SM3) BlockSize() int {
 	return SM3_CBLOCK
 }
 
-func (s *SM3Hash) Size() int {
+func (s *SM3) Size() int {
 	return SM3_DIGEST_LENGTH
 }
 
-func (s *SM3Hash) Close() {
+func (s *SM3) Close() {
 	if s.ctx != nil {
 		C.X_EVP_MD_CTX_free(s.ctx)
 		s.ctx = nil
 	}
 }
 
-func (s *SM3Hash) Reset() {
-	C.X_EVP_DigestInit_ex(s.ctx, C.X_EVP_sm3(), engineRef(s.engine))
+func (s *SM3) Reset() {
+	C.X_EVP_DigestInit_ex(s.ctx, C.X_EVP_sm3(), (*C.ENGINE)(s.engine.Engine()))
 }
 
-func (s *SM3Hash) Write(p []byte) (n int, err error) {
+func (s *SM3) Write(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
@@ -86,21 +88,21 @@ func (s *SM3Hash) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func (s *SM3Hash) Sum(in []byte) []byte {
-	hash, err := NewSM3HashWithEngine(s.engine)
+func (s *SM3) Sum(in []byte) []byte {
+	hash, err := NewWithEngine(s.engine)
 	if err != nil {
-		panic("NewSM3Hash fail " + err.Error())
+		panic("NewSM3 fail " + err.Error())
 	}
 
 	if C.X_EVP_MD_CTX_copy_ex(hash.ctx, s.ctx) == 0 {
-		panic("NewSM3Hash X_EVP_MD_CTX_copy_ex fail")
+		panic("NewSM3 X_EVP_MD_CTX_copy_ex fail")
 	}
 
 	result := hash.checkSum()
 	return append(in, result[:]...)
 }
 
-func (s *SM3Hash) checkSum() (result [SM3_DIGEST_LENGTH]byte) {
+func (s *SM3) checkSum() (result [SM3_DIGEST_LENGTH]byte) {
 	C.X_EVP_DigestFinal_ex(s.ctx, (*C.uchar)(unsafe.Pointer(&result[0])), nil)
 	return result
 }

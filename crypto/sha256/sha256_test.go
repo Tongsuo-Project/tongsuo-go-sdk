@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package sha256
 
 import (
 	"crypto/rand"
@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func TestSHA256(t *testing.T) {
+func Test(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		buf := make([]byte, 10*1024-i)
 		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
@@ -29,7 +29,7 @@ func TestSHA256(t *testing.T) {
 		}
 
 		expected := sha256.Sum256(buf)
-		got, err := SHA256(buf)
+		got, err := Sum(buf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -40,8 +40,8 @@ func TestSHA256(t *testing.T) {
 	}
 }
 
-func TestSHA256Writer(t *testing.T) {
-	ohash, err := NewSHA256Hash()
+func TestWriter(t *testing.T) {
+	ohash, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestSHA256Writer(t *testing.T) {
 	}
 }
 
-func benchmarkSHA256(b *testing.B, length int64, fn shafunc) {
+func benchmark(b *testing.B, length int64, fn func([]byte)) {
 	buf := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, buf); err != nil {
 		b.Fatal(err)
@@ -90,18 +90,18 @@ func benchmarkSHA256(b *testing.B, length int64, fn shafunc) {
 	}
 }
 
-func BenchmarkSHA256Large_openssl(b *testing.B) {
-	benchmarkSHA256(b, 1024*1024, func(buf []byte) { SHA256(buf) })
+func BenchmarkLarge_openssl(b *testing.B) {
+	benchmark(b, 1024*1024, func(buf []byte) { Sum(buf) })
 }
 
-func BenchmarkSHA256Large_stdlib(b *testing.B) {
-	benchmarkSHA256(b, 1024*1024, func(buf []byte) { sha256.Sum256(buf) })
+func BenchmarkLarge_stdlib(b *testing.B) {
+	benchmark(b, 1024*1024, func(buf []byte) { sha256.Sum256(buf) })
 }
 
-func BenchmarkSHA256Small_openssl(b *testing.B) {
-	benchmarkSHA256(b, 1, func(buf []byte) { SHA256(buf) })
+func BenchmarkSmall_openssl(b *testing.B) {
+	benchmark(b, 1, func(buf []byte) { Sum(buf) })
 }
 
-func BenchmarkSHA256Small_stdlib(b *testing.B) {
-	benchmarkSHA256(b, 1, func(buf []byte) { sha256.Sum256(buf) })
+func BenchmarkSmall_stdlib(b *testing.B) {
+	benchmark(b, 1, func(buf []byte) { sha256.Sum256(buf) })
 }

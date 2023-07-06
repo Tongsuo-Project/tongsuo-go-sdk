@@ -12,79 +12,74 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package sha256
 
-// #include "shim.h"
+// #include "../../shim.h"
 import "C"
 
 import (
 	"errors"
 	"runtime"
 	"unsafe"
+
+	tongsuogo "github.com/tongsuo-project/tongsuo-go-sdk"
 )
 
-type SHA1Hash struct {
+type SHA256 struct {
 	ctx    *C.EVP_MD_CTX
-	engine *Engine
+	engine *tongsuogo.Engine
 }
 
-func NewSHA1Hash() (*SHA1Hash, error) { return NewSHA1HashWithEngine(nil) }
+func New() (*SHA256, error) { return NewWithEngine(nil) }
 
-func NewSHA1HashWithEngine(e *Engine) (*SHA1Hash, error) {
-	hash := &SHA1Hash{engine: e}
+func NewWithEngine(e *tongsuogo.Engine) (*SHA256, error) {
+	hash := &SHA256{engine: e}
 	hash.ctx = C.X_EVP_MD_CTX_new()
 	if hash.ctx == nil {
-		return nil, errors.New("openssl: sha1: unable to allocate ctx")
+		return nil, errors.New("openssl: sha256: unable to allocate ctx")
 	}
-	runtime.SetFinalizer(hash, func(hash *SHA1Hash) { hash.Close() })
+	runtime.SetFinalizer(hash, func(hash *SHA256) { hash.Close() })
 	if err := hash.Reset(); err != nil {
 		return nil, err
 	}
 	return hash, nil
 }
 
-func (s *SHA1Hash) Close() {
+func (s *SHA256) Close() {
 	if s.ctx != nil {
 		C.X_EVP_MD_CTX_free(s.ctx)
 		s.ctx = nil
 	}
 }
 
-func engineRef(e *Engine) *C.ENGINE {
-	if e == nil {
-		return nil
-	}
-	return e.e
-}
-
-func (s *SHA1Hash) Reset() error {
-	if 1 != C.X_EVP_DigestInit_ex(s.ctx, C.X_EVP_sha1(), engineRef(s.engine)) {
-		return errors.New("openssl: sha1: cannot init digest ctx")
+func (s *SHA256) Reset() error {
+	if 1 != C.X_EVP_DigestInit_ex(s.ctx, C.X_EVP_sha256(), (*C.ENGINE)(s.engine.Engine())) {
+		return errors.New("openssl: sha256: cannot init digest ctx")
 	}
 	return nil
 }
 
-func (s *SHA1Hash) Write(p []byte) (n int, err error) {
+func (s *SHA256) Write(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
 	if 1 != C.X_EVP_DigestUpdate(s.ctx, unsafe.Pointer(&p[0]),
 		C.size_t(len(p))) {
-		return 0, errors.New("openssl: sha1: cannot update digest")
+		return 0, errors.New("openssl: sha256: cannot update digest")
 	}
 	return len(p), nil
 }
 
-func (s *SHA1Hash) Sum() (result [20]byte, err error) {
+func (s *SHA256) Sum() (result [32]byte, err error) {
 	if 1 != C.X_EVP_DigestFinal_ex(s.ctx,
 		(*C.uchar)(unsafe.Pointer(&result[0])), nil) {
-		return result, errors.New("openssl: sha1: cannot finalize ctx")
+		return result, errors.New("openssl: sha256: cannot finalize ctx")
 	}
 	return result, s.Reset()
 }
 
-func SHA1(data []byte) (result [20]byte, err error) {
-	hash, err := NewSHA1Hash()
+func Sum(data []byte) (result [32]byte, err error) {
+	hash, err := New()
 	if err != nil {
 		return result, err
 	}

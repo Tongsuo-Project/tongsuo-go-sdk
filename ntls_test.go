@@ -13,51 +13,66 @@ const (
 	ECDHESM2Cipher = "ECDHE-SM2-WITH-SM4-SM3"
 )
 
-func TestNTLSECCSM2(t *testing.T) {
-	ctx, err := NewCtxWithVersion(NTLS)
-	if err != nil {
-		t.Error(err)
-		return
+func TestNTLS(t *testing.T) {
+	cases := []struct {
+		cipher string
+	}{
+		{
+			cipher: ECCSM2Cipher,
+		},
+		{
+			cipher: ECDHESM2Cipher,
+		},
 	}
 
-	if err := ctx.SetCipherList(ECCSM2Cipher); err != nil {
-		t.Error(err)
-		return
-	}
+	for _, c := range cases {
+		t.Run(c.cipher, func(t *testing.T) {
+			ctx, err := NewCtxWithVersion(NTLS)
+			if err != nil {
+				t.Error(err)
+				return
+			}
 
-	server, err := newNTLSServer(t)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	defer server.Close()
-	go server.Run()
+			if err := ctx.SetCipherList(c.cipher); err != nil {
+				t.Error(err)
+				return
+			}
 
-	conn, err := Dial("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	defer conn.Close()
+			server, err := newNTLSServer(t)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer server.Close()
+			go server.Run()
 
-	cipher, err := conn.CurrentCipher()
-	if err != nil {
-		t.Error(err)
-		return
-	}
+			conn, err := Dial("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer conn.Close()
 
-	t.Log("current cipher", cipher)
+			cipher, err := conn.CurrentCipher()
+			if err != nil {
+				t.Error(err)
+				return
+			}
 
-	request := "hello tongsuo\n"
-	if _, err := conn.Write([]byte(request)); err != nil {
-		t.Error(err)
-		return
-	}
+			t.Log("current cipher", cipher)
 
-	req, err := bufio.NewReader(conn).ReadString('\n')
-	if req != request {
-		t.Errorf("expect response '%s' got '%s'", request, req)
-		return
+			request := "hello tongsuo\n"
+			if _, err := conn.Write([]byte(request)); err != nil {
+				t.Error(err)
+				return
+			}
+
+			req, err := bufio.NewReader(conn).ReadString('\n')
+			if req != request {
+				t.Errorf("expect response '%s' got '%s'", request, req)
+				return
+			}
+		})
 	}
 }
 
