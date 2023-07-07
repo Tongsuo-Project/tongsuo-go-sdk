@@ -47,5 +47,8 @@ jobs:
     - name: Build
       run: go build
 
+    - name: Pre-Test
+      run: cd tongsuo && git checkout 8.4-stable
+
     - name: Test
       run: go test -exec "env LD_LIBRARY_PATH=/opt/tongsuo/lib" ./...

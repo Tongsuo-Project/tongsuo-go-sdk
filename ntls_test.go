@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -12,6 +13,8 @@ const (
 	ECCSM2Cipher   = "ECC-SM2-WITH-SM4-SM3"
 	ECDHESM2Cipher = "ECDHE-SM2-WITH-SM4-SM3"
 	internalServer = true
+
+	testCertDir = "tongsuo/test/certs/sm2"
 )
 
 func TestNTLS(t *testing.T) {
@@ -21,18 +24,21 @@ func TestNTLS(t *testing.T) {
 		signKeyFile  string
 		encCertFile  string
 		encKeyFile   string
+		caFile       string
 		runServer    bool
 	}{
 		{
 			cipher:    ECCSM2Cipher,
 			runServer: internalServer,
+			caFile:    filepath.Join(testCertDir, "chain-ca.crt"),
 		},
 		{
 			cipher:       ECDHESM2Cipher,
-			signCertFile: "tongsuo/test_certs/double_cert/CS.cert.pem",
-			signKeyFile:  "tongsuo/test_certs/double_cert/CS.key.pem",
-			encCertFile:  "tongsuo/test_certs/double_cert/CE.cert.pem",
-			encKeyFile:   "tongsuo/test_certs/double_cert/CE.key.pem",
+			signCertFile: filepath.Join(testCertDir, "client_sign.crt"),
+			signKeyFile:  filepath.Join(testCertDir, "client_sign.key"),
+			encCertFile:  filepath.Join(testCertDir, "client_enc.crt"),
+			encKeyFile:   filepath.Join(testCertDir, "client_enc.key"),
+			caFile:       filepath.Join(testCertDir, "chain-ca.crt"),
 			runServer:    internalServer,
 		},
 	}
@@ -136,6 +142,13 @@ func TestNTLS(t *testing.T) {
 				}
 			}
 
+			if c.caFile != "" {
+				if err := ctx.LoadVerifyLocations(c.caFile, ""); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+
 			conn, err := Dial("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification)
 			if err != nil {
 				t.Error(err)
@@ -157,8 +170,14 @@ func TestNTLS(t *testing.T) {
 				return
 			}
 
-			if _, err := bufio.NewReader(conn).ReadString('\n'); err != nil {
+			resp, err := bufio.NewReader(conn).ReadString('\n')
+			if err != nil {
 				t.Error(err)
+				return
+			}
+
+			if resp != request {
+				t.Error("response data is not expected: ", resp)
 				return
 			}
 		})
@@ -179,18 +198,18 @@ func newNTLSServer(t *testing.T, options ...func(sslctx *Ctx) error) (*echoServe
 		}
 	}
 
-	if err := ctx.LoadVerifyLocations("tongsuo/test_certs/double_cert/CA.cert.pem", ""); err != nil {
+	if err := ctx.LoadVerifyLocations(filepath.Join(testCertDir, "chain-ca.crt"), ""); err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	encCertPEM, err := os.ReadFile("tongsuo/test_certs/double_cert/SE.cert.pem")
+	encCertPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_enc.crt"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	signCertPEM, err := os.ReadFile("tongsuo/test_certs/double_cert/SS.cert.pem")
+	signCertPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_sign.crt"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
@@ -218,13 +237,13 @@ func newNTLSServer(t *testing.T, options ...func(sslctx *Ctx) error) (*echoServe
 		return nil, err
 	}
 
-	encKeyPEM, err := os.ReadFile("tongsuo/test_certs/double_cert/SE.key.pem")
+	encKeyPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_enc.key"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	signKeyPEM, err := os.ReadFile("tongsuo/test_certs/double_cert/SS.key.pem")
+	signKeyPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_sign.key"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
