@@ -75,7 +75,7 @@ func (s *SM3) Close() {
 }
 
 func (s *SM3) Reset() {
-	C.X_EVP_DigestInit_ex(s.ctx, C.X_EVP_sm3(), (*C.ENGINE)(s.engine.Engine()))
+	C.X_EVP_DigestInit_ex(s.ctx, C.EVP_sm3(), (*C.ENGINE)(s.engine.Engine()))
 }
 
 func (s *SM3) Write(p []byte) (n int, err error) {
@@ -113,7 +113,7 @@ func SM3Sum(data []byte) (result [SM3_DIGEST_LENGTH]byte) {
 		C.size_t(len(data)),
 		(*C.uchar)(unsafe.Pointer(&result[0])),
 		nil,
-		C.X_EVP_sm3(),
+		C.EVP_sm3(),
 		nil,
 	)
 	return
