@@ -5,6 +5,9 @@
 *.so
 *.dylib
 
+# Temp files for IDEs
+*.exrc
+
 # Test binary, built with `go test -c`
 *.test
 

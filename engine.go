@@ -29,6 +29,13 @@ type Engine struct {
 	e *C.ENGINE
 }
 
+func (e *Engine) Engine() *C.ENGINE {
+	if e == nil {
+		return nil
+	}
+	return e.e
+}
+
 func EngineById(name string) (*Engine, error) {
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))

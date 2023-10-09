@@ -410,15 +410,29 @@ func (c *Ctx) LoadVerifyLocations(ca_file string, ca_path string) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	var c_ca_file, c_ca_path *C.char
+
+	if ca_path == "" && ca_file == "" {
+		if C.SSL_CTX_set_default_verify_file(c.ctx) <= 0 {
+			return errorFromErrorQueue()
+		}
+		if C.SSL_CTX_set_default_verify_dir(c.ctx) <= 0 {
+			return errorFromErrorQueue()
+		}
+
+		return nil
+	}
+
 	if ca_file != "" {
 		c_ca_file = C.CString(ca_file)
 		defer C.free(unsafe.Pointer(c_ca_file))
 	}
+
 	if ca_path != "" {
 		c_ca_path = C.CString(ca_path)
 		defer C.free(unsafe.Pointer(c_ca_path))
 	}
-	if C.SSL_CTX_load_verify_locations(c.ctx, c_ca_file, c_ca_path) != 1 {
+
+	if C.SSL_CTX_load_verify_locations(c.ctx, c_ca_file, c_ca_path) <= 0 {
 		return errorFromErrorQueue()
 	}
 	return nil

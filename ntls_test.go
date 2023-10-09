@@ -5,81 +5,211 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 const (
 	ECCSM2Cipher   = "ECC-SM2-WITH-SM4-SM3"
 	ECDHESM2Cipher = "ECDHE-SM2-WITH-SM4-SM3"
+	internalServer = true
+
+	testCertDir = "tongsuo/test/certs/sm2"
 )
 
-func TestNTLSECCSM2(t *testing.T) {
-	ctx, err := NewCtxWithVersion(NTLS)
-	if err != nil {
-		t.Error(err)
-		return
+func TestNTLS(t *testing.T) {
+	cases := []struct {
+		cipher       string
+		signCertFile string
+		signKeyFile  string
+		encCertFile  string
+		encKeyFile   string
+		caFile       string
+		runServer    bool
+	}{
+		{
+			cipher:    ECCSM2Cipher,
+			runServer: internalServer,
+			caFile:    filepath.Join(testCertDir, "chain-ca.crt"),
+		},
+		{
+			cipher:       ECDHESM2Cipher,
+			signCertFile: filepath.Join(testCertDir, "client_sign.crt"),
+			signKeyFile:  filepath.Join(testCertDir, "client_sign.key"),
+			encCertFile:  filepath.Join(testCertDir, "client_enc.crt"),
+			encKeyFile:   filepath.Join(testCertDir, "client_enc.key"),
+			caFile:       filepath.Join(testCertDir, "chain-ca.crt"),
+			runServer:    internalServer,
+		},
 	}
 
-	if err := ctx.SetCipherList(ECCSM2Cipher); err != nil {
-		t.Error(err)
-		return
-	}
+	for _, c := range cases {
+		t.Run(c.cipher, func(t *testing.T) {
+			if c.runServer {
+				server, err := newNTLSServer(t, func(sslctx *Ctx) error {
+					return sslctx.SetCipherList(c.cipher)
+				})
 
-	server, err := newNTLSServer(t)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	defer server.Close()
-	go server.Run()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				defer server.Close()
+				go server.Run()
+			}
 
-	conn, err := Dial("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	defer conn.Close()
+			ctx, err := NewCtxWithVersion(NTLS)
+			if err != nil {
+				t.Error(err)
+				return
+			}
 
-	cipher, err := conn.CurrentCipher()
-	if err != nil {
-		t.Error(err)
-		return
-	}
+			if err := ctx.SetCipherList(c.cipher); err != nil {
+				t.Error(err)
+				return
+			}
 
-	t.Log("current cipher", cipher)
+			if c.signCertFile != "" {
+				signCertPEM, err := os.ReadFile(c.signCertFile)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				signCert, err := LoadCertificateFromPEM(signCertPEM)
+				if err != nil {
+					t.Error(err)
+					return
+				}
 
-	request := "hello tongsuo\n"
-	if _, err := conn.Write([]byte(request)); err != nil {
-		t.Error(err)
-		return
-	}
+				if err := ctx.UseSignCertificate(signCert); err != nil {
+					t.Error(err)
+					return
+				}
+			}
 
-	req, err := bufio.NewReader(conn).ReadString('\n')
-	if req != request {
-		t.Errorf("expect response '%s' got '%s'", request, req)
-		return
+			if c.signKeyFile != "" {
+				signKeyPEM, err := os.ReadFile(c.signKeyFile)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				signKey, err := LoadPrivateKeyFromPEM(signKeyPEM)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+
+				if err := ctx.UseSignPrivateKey(signKey); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+
+			if c.encCertFile != "" {
+				encCertPEM, err := os.ReadFile(c.encCertFile)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				encCert, err := LoadCertificateFromPEM(encCertPEM)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+
+				if err := ctx.UseEncryptCertificate(encCert); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+
+			if c.encKeyFile != "" {
+				encKeyPEM, err := os.ReadFile(c.encKeyFile)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+
+				encKey, err := LoadPrivateKeyFromPEM(encKeyPEM)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+
+				if err := ctx.UseEncryptPrivateKey(encKey); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+
+			if c.caFile != "" {
+				if err := ctx.LoadVerifyLocations(c.caFile, ""); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+
+			conn, err := Dial("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer conn.Close()
+
+			cipher, err := conn.CurrentCipher()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			t.Log("current cipher", cipher)
+
+			request := "hello tongsuo\n"
+			if _, err := conn.Write([]byte(request)); err != nil {
+				t.Error(err)
+				return
+			}
+
+			resp, err := bufio.NewReader(conn).ReadString('\n')
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			if resp != request {
+				t.Error("response data is not expected: ", resp)
+				return
+			}
+		})
 	}
 }
 
-func newNTLSServer(t *testing.T) (*echoServer, error) {
+func newNTLSServer(t *testing.T, options ...func(sslctx *Ctx) error) (*echoServer, error) {
 	ctx, err := NewCtxWithVersion(NTLS)
 	if err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	if err := ctx.SetCipherList(ECCSM2Cipher); err != nil {
+	for _, f := range options {
+		if err := f(ctx); err != nil {
+			t.Error(err)
+			return nil, err
+		}
+	}
+
+	if err := ctx.LoadVerifyLocations(filepath.Join(testCertDir, "chain-ca.crt"), ""); err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	encCertPEM, err := os.ReadFile("tongsuo/test_certs/double_cert/SE.cert.pem")
+	encCertPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_enc.crt"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	signCertPEM, err := os.ReadFile("tongsuo/test_certs/double_cert/SS.cert.pem")
+	signCertPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_sign.crt"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
@@ -107,13 +237,13 @@ func newNTLSServer(t *testing.T) (*echoServer, error) {
 		return nil, err
 	}
 
-	encKeyPEM, err := os.ReadFile("tongsuo/test_certs/double_cert/SE.key.pem")
+	encKeyPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_enc.key"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	signKeyPEM, err := os.ReadFile("tongsuo/test_certs/double_cert/SS.key.pem")
+	signKeyPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_sign.key"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
