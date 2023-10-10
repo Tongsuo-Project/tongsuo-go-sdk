@@ -14,7 +14,7 @@ const (
 	ECDHESM2Cipher = "ECDHE-SM2-WITH-SM4-SM3"
 	internalServer = true
 
-	testCertDir = "tongsuo/test/certs/sm2"
+	testCertDir = "test/certs/sm2"
 )
 
 func TestNTLS(t *testing.T) {
