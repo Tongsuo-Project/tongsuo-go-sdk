@@ -50,7 +50,8 @@ extern long X_SSL_set_options(SSL* ssl, long options);
 extern long X_SSL_get_options(SSL* ssl);
 extern long X_SSL_clear_options(SSL* ssl, long options);
 extern long X_SSL_set_tlsext_host_name(SSL *ssl, const char *name);
-extern const char * X_SSL_get_cipher_name(const SSL *ssl);
+extern const char *X_SSL_get_cipher_name(const SSL *ssl);
+extern const char *X_SSL_get_version(const SSL *ssl);
 extern int X_SSL_session_reused(SSL *ssl);
 extern int X_SSL_new_index();
 
