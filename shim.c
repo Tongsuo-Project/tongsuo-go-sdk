@@ -445,9 +445,15 @@ long X_SSL_clear_options(SSL* ssl, long options) {
 long X_SSL_set_tlsext_host_name(SSL *ssl, const char *name) {
    return SSL_set_tlsext_host_name(ssl, name);
 }
-const char * X_SSL_get_cipher_name(const SSL *ssl) {
+
+const char *X_SSL_get_cipher_name(const SSL *ssl) {
    return SSL_get_cipher_name(ssl);
 }
+
+const char *X_SSL_get_version(const SSL *ssl) {
+   return SSL_get_version(ssl);
+}
+
 int X_SSL_session_reused(SSL *ssl) {
     return SSL_session_reused(ssl);
 }

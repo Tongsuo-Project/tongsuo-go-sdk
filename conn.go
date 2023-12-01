@@ -198,6 +198,15 @@ func (c *Conn) CurrentCipher() (string, error) {
 	return C.GoString(p), nil
 }
 
+func (c *Conn) GetVersion() (string, error) {
+	p := C.X_SSL_get_version(c.ssl)
+	if p == nil {
+		return "", errors.New("Failed to get version")
+	}
+
+	return C.GoString(p), nil
+}
+
 func (c *Conn) fillInputBuffer() error {
 	for {
 		n, err := c.into_ssl.ReadFromOnce(c.conn)
