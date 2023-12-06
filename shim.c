@@ -50,18 +50,8 @@ const EVP_MD *X_EVP_sm3() {
 }
 #endif
 
-
-/*
- ************************************************
- * v1.1.1 and later implementation
- ************************************************
- */
-#if OPENSSL_VERSION_NUMBER >= 0x1010100fL
-
 const int X_ED25519_SUPPORT = 1;
 int X_EVP_PKEY_ED25519 = EVP_PKEY_ED25519;
-
-
 
 int X_EVP_Digest(const void *data, size_t count,
 		unsigned char *md, unsigned int *size,
@@ -89,41 +79,6 @@ int X_EVP_DigestVerify(EVP_MD_CTX *ctx, const unsigned char *sigret,
 		size_t siglen, const unsigned char *tbs, size_t tbslen){
 	return EVP_DigestVerify(ctx, sigret, siglen, tbs, tbslen);
 }
-
-#else
-
-const int X_ED25519_SUPPORT = 0;
-int X_EVP_PKEY_ED25519 = EVP_PKEY_NONE;
-
-int X_EVP_DigestSignInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx,
-		const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey){
-	return 0;
-}
-
-int X_EVP_DigestSign(EVP_MD_CTX *ctx, unsigned char *sigret,
-		size_t *siglen, const unsigned char *tbs, size_t tbslen) {
-	return 0;
-}
-
-
-int X_EVP_DigestVerifyInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx,
-		const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey){
-	return 0;
-}
-
-int X_EVP_DigestVerify(EVP_MD_CTX *ctx, const unsigned char *sigret,
-		size_t siglen, const unsigned char *tbs, size_t tbslen){
-	return 0;
-}
-
-#endif
-
-/*
- ************************************************
- * v1.1.X and later implementation
- ************************************************
- */
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL
 
 void X_BIO_set_data(BIO* bio, void* data) {
 	BIO_set_data(bio, data);
@@ -244,158 +199,6 @@ void X_HMAC_CTX_free(HMAC_CTX *ctx) {
 int X_PEM_write_bio_PrivateKey_traditional(BIO *bio, EVP_PKEY *key, const EVP_CIPHER *enc, unsigned char *kstr, int klen, pem_password_cb *cb, void *u) {
 	return PEM_write_bio_PrivateKey_traditional(bio, key, enc, kstr, klen, cb, u);
 }
-
-#endif
-
-/*
- ************************************************
- * v1.0.X implementation
- ************************************************
- */
-#if OPENSSL_VERSION_NUMBER < 0x1010000fL
-
-static int x_bio_create(BIO *b) {
-	b->shutdown = 1;
-	b->init = 1;
-	b->num = -1;
-	b->ptr = NULL;
-	b->flags = 0;
-	return 1;
-}
-
-static int x_bio_free(BIO *b) {
-	return 1;
-}
-
-static BIO_METHOD writeBioMethod = {
-	BIO_TYPE_SOURCE_SINK,
-	"Go Write BIO",
-	(int (*)(BIO *, const char *, int))go_write_bio_write,
-	NULL,
-	go_write_bio_puts,
-	NULL,
-	go_write_bio_ctrl,
-	x_bio_create,
-	x_bio_free,
-	NULL};
-
-static BIO_METHOD* BIO_s_writeBio() { return &writeBioMethod; }
-
-static BIO_METHOD readBioMethod = {
-	BIO_TYPE_SOURCE_SINK,
-	"Go Read BIO",
-	NULL,
-	go_read_bio_read,
-	NULL,
-	NULL,
-	go_read_bio_ctrl,
-	x_bio_create,
-	x_bio_free,
-	NULL};
-
-static BIO_METHOD* BIO_s_readBio() { return &readBioMethod; }
-
-int x_bio_init_methods() {
-	/* statically initialized above */
-	return 0;
-}
-
-void X_BIO_set_data(BIO* bio, void* data) {
-	bio->ptr = data;
-}
-
-void* X_BIO_get_data(BIO* bio) {
-	return bio->ptr;
-}
-
-EVP_MD_CTX* X_EVP_MD_CTX_new() {
-	return EVP_MD_CTX_create();
-}
-
-void X_EVP_MD_CTX_free(EVP_MD_CTX* ctx) {
-	EVP_MD_CTX_destroy(ctx);
-}
-
-int X_X509_add_ref(X509* x509) {
-	CRYPTO_add(&x509->references, 1, CRYPTO_LOCK_X509);
-	return 1;
-}
-
-const ASN1_TIME *X_X509_get0_notBefore(const X509 *x) {
-	return x->cert_info->validity->notBefore;
-}
-
-const ASN1_TIME *X_X509_get0_notAfter(const X509 *x) {
-	return x->cert_info->validity->notAfter;
-}
-
-const EVP_MD *X_EVP_dss() {
-	return EVP_dss();
-}
-
-const EVP_MD *X_EVP_dss1() {
-	return EVP_dss1();
-}
-
-const EVP_MD *X_EVP_sha() {
-	return EVP_sha();
-}
-
-int X_EVP_CIPHER_CTX_encrypting(const EVP_CIPHER_CTX *ctx) {
-	return ctx->encrypt;
-}
-
-HMAC_CTX *X_HMAC_CTX_new(void) {
-	/* v1.1.0 uses a OPENSSL_zalloc to allocate the memory which does not exist
-	 * in previous versions. malloc+memset to get the same behavior */
-	HMAC_CTX *ctx = (HMAC_CTX *)OPENSSL_malloc(sizeof(HMAC_CTX));
-	if (ctx) {
-		memset(ctx, 0, sizeof(HMAC_CTX));
-		HMAC_CTX_init(ctx);
-	}
-	return ctx;
-}
-
-void X_HMAC_CTX_free(HMAC_CTX *ctx) {
-	if (ctx) {
-		HMAC_CTX_cleanup(ctx);
-		OPENSSL_free(ctx);
-	}
-}
-
-int X_PEM_write_bio_PrivateKey_traditional(BIO *bio, EVP_PKEY *key, const EVP_CIPHER *enc, unsigned char *kstr, int klen, pem_password_cb *cb, void *u) {
-	/* PEM_write_bio_PrivateKey always tries to use the PKCS8 format if it
-	 * is available, instead of using the "traditional" format as stated in the
-	 * OpenSSL man page.
-	 * i2d_PrivateKey should give us the correct DER encoding, so we'll just
-	 * use PEM_ASN1_write_bio directly to write the DER encoding with the correct
-	 * type header. */
-
-	int ppkey_id, pkey_base_id, ppkey_flags;
-	const char *pinfo, *ppem_str;
-	char pem_type_str[80];
-
-	// Lookup the ASN1 method information to get the pem type
-	if (EVP_PKEY_asn1_get0_info(&ppkey_id, &pkey_base_id, &ppkey_flags, &pinfo, &ppem_str, key->ameth) != 1) {
-		return 0;
-	}
-	// Set up the PEM type string
-	if (BIO_snprintf(pem_type_str, 80, "%s PRIVATE KEY", ppem_str) <= 0) {
-		// Failed to write out the pem type string, something is really wrong.
-		return 0;
-	}
-	// Write out everything to the BIO
-	return PEM_ASN1_write_bio((i2d_of_void *)i2d_PrivateKey,
-		pem_type_str, bio, key, enc, kstr, klen, cb, u);
-}
-
-#endif
-
-/*
- ************************************************
- * common implementation
- ************************************************
- */
 
 int X_shim_init() {
 	int rc = 0;
