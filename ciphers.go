@@ -28,6 +28,16 @@ const (
 	GCM_TAG_MAXLEN = 16
 )
 
+const (
+	CIPHER_MODE_ECB = 1
+	CIPHER_MODE_CBC = 2
+	CIPHER_MODE_CFB = 3
+	CIPHER_MODE_OFB = 4
+	CIPHER_MODE_CTR = 5
+	CIPHER_MODE_GCM = 6
+	CIPHER_MODE_CCM = 7
+)
+
 type CipherCtx interface {
 	Cipher() *Cipher
 	BlockSize() int

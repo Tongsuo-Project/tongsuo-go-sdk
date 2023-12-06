@@ -9,8 +9,9 @@ package main
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto/sm3"
-	"os"
 )
 
 func main() {
@@ -19,14 +20,14 @@ func main() {
 
 	h, err := sm3.New()
 	if err != nil {
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	if _, err := h.Write([]byte("hello")); err != nil {
-		os.Exit(1)
+		log.Fatal(err)
 	}
 	if _, err := h.Write([]byte(" world")); err != nil {
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	var res [sm3.SM3_DIGEST_LENGTH]byte
