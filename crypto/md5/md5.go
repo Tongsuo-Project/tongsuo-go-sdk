@@ -14,8 +14,8 @@
 
 package md5
 
-// #include "../../shim.h"
-// #cgo linux CFLAGS: -Wno-deprecated-declarations -I/opt/tongsuo/include
+// #include "../shim.h"
+// #cgo linux CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
 // #cgo linux LDFLAGS: -L/opt/tongsuo/lib -lcrypto
 // #cgo darwin CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
 // #cgo darwin LDFLAGS: -L/opt/tongsuo/lib -lcrypto
@@ -29,7 +29,7 @@ import (
 	"runtime"
 	"unsafe"
 
-	tongsuogo "github.com/tongsuo-project/tongsuo-go-sdk"
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 const (
@@ -41,12 +41,12 @@ var _ hash.Hash = new(MD5)
 
 type MD5 struct {
 	ctx    *C.EVP_MD_CTX
-	engine *tongsuogo.Engine
+	engine *crypto.Engine
 }
 
 func New() (*MD5, error) { return NewWithEngine(nil) }
 
-func NewWithEngine(e *tongsuogo.Engine) (*MD5, error) {
+func NewWithEngine(e *crypto.Engine) (*MD5, error) {
 	h, err := newMD5WithEngine(e)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func NewWithEngine(e *tongsuogo.Engine) (*MD5, error) {
 	return h, nil
 }
 
-func newMD5WithEngine(e *tongsuogo.Engine) (*MD5, error) {
+func newMD5WithEngine(e *crypto.Engine) (*MD5, error) {
 	hash := &MD5{engine: e}
 	hash.ctx = C.X_EVP_MD_CTX_new()
 	if hash.ctx == nil {

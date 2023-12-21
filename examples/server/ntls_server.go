@@ -15,6 +15,7 @@ import (
 	"os"
 
 	ts "github.com/tongsuo-project/tongsuo-go-sdk"
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 func handleConn(conn net.Conn) {
@@ -77,13 +78,13 @@ func newNTLSServer(acceptAddr string, signCertFile string, signKeyFile string, e
 		return nil, err
 	}
 
-	encCert, err := ts.LoadCertificateFromPEM(encCertPEM)
+	encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
 
-	signCert, err := ts.LoadCertificateFromPEM(signCertPEM)
+	signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -111,13 +112,13 @@ func newNTLSServer(acceptAddr string, signCertFile string, signKeyFile string, e
 		return nil, err
 	}
 
-	encKey, err := ts.LoadPrivateKeyFromPEM(encKeyPEM)
+	encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
 
-	signKey, err := ts.LoadPrivateKeyFromPEM(signKeyPEM)
+	signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
 	if err != nil {
 		log.Println(err)
 		return nil, err

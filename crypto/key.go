@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package crypto
 
 // #include "shim.h"
 import "C"
@@ -85,7 +85,7 @@ type PublicKey interface {
 	// `KeyType() == KeyTypeRSA2` would both have `BaseType() == KeyTypeRSA`.
 	BaseType() NID
 
-	evpPKey() *C.EVP_PKEY
+	EvpPKey() *C.EVP_PKEY
 }
 
 type PrivateKey interface {
@@ -107,7 +107,7 @@ type pKey struct {
 	key *C.EVP_PKEY
 }
 
-func (key *pKey) evpPKey() *C.EVP_PKEY { return key.key }
+func (key *pKey) EvpPKey() *C.EVP_PKEY { return key.key }
 
 func (key *pKey) KeyType() NID {
 	return NID(C.EVP_PKEY_id(key.key))
@@ -426,6 +426,19 @@ func GenerateRSAKeyWithExponent(bits int, exponent int) (PrivateKey, error) {
 	})
 	return p, nil
 }
+
+// EllipticCurve repesents the ASN.1 OID of an elliptic curve.
+// see https://www.openssl.org/docs/apps/ecparam.html for a list of implemented curves.
+type EllipticCurve int
+
+const (
+	// P-256: X9.62/SECG curve over a 256 bit prime field
+	Prime256v1 EllipticCurve = C.NID_X9_62_prime256v1
+	// P-384: NIST/SECG curve over a 384 bit prime field
+	Secp384r1 EllipticCurve = C.NID_secp384r1
+	// P-521: NIST/SECG curve over a 521 bit prime field
+	Secp521r1 EllipticCurve = C.NID_secp521r1
+)
 
 // GenerateECKey generates a new elliptic curve private key on the speicified
 // curve.

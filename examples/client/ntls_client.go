@@ -14,6 +14,7 @@ import (
 	"os"
 
 	ts "github.com/tongsuo-project/tongsuo-go-sdk"
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 func main() {
@@ -49,7 +50,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		signCert, err := ts.LoadCertificateFromPEM(signCertPEM)
+		signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
 		if err != nil {
 			panic(err)
 		}
@@ -64,7 +65,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		signKey, err := ts.LoadPrivateKeyFromPEM(signKeyPEM)
+		signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
 		if err != nil {
 			panic(err)
 		}
@@ -79,7 +80,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		encCert, err := ts.LoadCertificateFromPEM(encCertPEM)
+		encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
 		if err != nil {
 			panic(err)
 		}
@@ -95,7 +96,7 @@ func main() {
 			panic(err)
 		}
 
-		encKey, err := ts.LoadPrivateKeyFromPEM(encKeyPEM)
+		encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
 		if err != nil {
 			panic(err)
 		}

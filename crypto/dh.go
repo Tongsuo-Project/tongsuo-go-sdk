@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package crypto
 
 // #include "shim.h"
 import "C"
@@ -27,7 +27,7 @@ import (
 // keys, but it is most commonly a variant of Diffie-Hellman.
 func DeriveSharedSecret(private PrivateKey, public PublicKey) ([]byte, error) {
 	// Create context for the shared secret derivation
-	dhCtx := C.EVP_PKEY_CTX_new(private.evpPKey(), nil)
+	dhCtx := C.EVP_PKEY_CTX_new(private.EvpPKey(), nil)
 	if dhCtx == nil {
 		return nil, errors.New("failed creating shared secret derivation context")
 	}
@@ -39,7 +39,7 @@ func DeriveSharedSecret(private PrivateKey, public PublicKey) ([]byte, error) {
 	}
 
 	// Provide the peer's public key
-	if int(C.EVP_PKEY_derive_set_peer(dhCtx, public.evpPKey())) != 1 {
+	if int(C.EVP_PKEY_derive_set_peer(dhCtx, public.EvpPKey())) != 1 {
 		return nil, errors.New("failed adding peer public key to context")
 	}
 

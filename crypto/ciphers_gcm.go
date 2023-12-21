@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package crypto
 
 // #include <openssl/evp.h>
 import "C"
@@ -81,7 +81,7 @@ func NewGCMEncryptionCipherCtx(blocksize int, e *Engine, key, iv []byte) (
 		return nil, err
 	}
 	if len(iv) > 0 {
-		err := ctx.setCtrl(C.EVP_CTRL_GCM_SET_IVLEN, len(iv))
+		err := ctx.SetCtrl(C.EVP_CTRL_GCM_SET_IVLEN, len(iv))
 		if err != nil {
 			return nil, fmt.Errorf("could not set IV len to %d: %s",
 				len(iv), err)
@@ -105,7 +105,7 @@ func NewGCMDecryptionCipherCtx(blocksize int, e *Engine, key, iv []byte) (
 		return nil, err
 	}
 	if len(iv) > 0 {
-		err := ctx.setCtrl(C.EVP_CTRL_GCM_SET_IVLEN, len(iv))
+		err := ctx.SetCtrl(C.EVP_CTRL_GCM_SET_IVLEN, len(iv))
 		if err != nil {
 			return nil, fmt.Errorf("could not set IV len to %d: %s",
 				len(iv), err)
@@ -143,10 +143,10 @@ func (ctx *authDecryptionCipherCtx) ExtraData(aad []byte) error {
 }
 
 func (ctx *authEncryptionCipherCtx) GetTag() ([]byte, error) {
-	return ctx.getCtrlBytes(C.EVP_CTRL_GCM_GET_TAG, GCM_TAG_MAXLEN,
+	return ctx.GetCtrlBytes(C.EVP_CTRL_GCM_GET_TAG, GCM_TAG_MAXLEN,
 		GCM_TAG_MAXLEN)
 }
 
 func (ctx *authDecryptionCipherCtx) SetTag(tag []byte) error {
-	return ctx.setCtrlBytes(C.EVP_CTRL_GCM_SET_TAG, len(tag), tag)
+	return ctx.SetCtrlBytes(C.EVP_CTRL_GCM_SET_TAG, len(tag), tag)
 }

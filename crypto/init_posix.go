@@ -16,7 +16,7 @@
 // +build linux darwin solaris
 // +build !windows
 
-package tongsuogo
+package crypto
 
 /*
 #include <errno.h>

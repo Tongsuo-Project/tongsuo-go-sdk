@@ -15,7 +15,7 @@
 //go:build windows
 // +build windows
 
-package tongsuogo
+package crypto
 
 /*
 #include <errno.h>
