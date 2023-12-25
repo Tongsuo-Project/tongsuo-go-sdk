@@ -20,6 +20,8 @@ import "C"
 import (
 	"os"
 	"unsafe"
+
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 const (
@@ -29,15 +31,15 @@ const (
 // TicketCipherCtx describes the cipher that will be used by the ticket store
 // for encrypting the tickets. Engine may be nil if no engine is desired.
 type TicketCipherCtx struct {
-	Cipher *Cipher
-	Engine *Engine
+	Cipher *crypto.Cipher
+	Engine *crypto.Engine
 }
 
 // TicketDigestCtx describes the digest that will be used by the ticket store
 // to authenticate the data. Engine may be nil if no engine is desired.
 type TicketDigestCtx struct {
-	Digest *Digest
-	Engine *Engine
+	Digest *crypto.Digest
+	Engine *crypto.Engine
 }
 
 // TicketName is an identifier for the key material for a ticket.
@@ -88,14 +90,14 @@ func (t *TicketStore) cipherEngine() *C.ENGINE {
 	if t.CipherCtx.Engine == nil {
 		return nil
 	}
-	return t.CipherCtx.Engine.e
+	return (*C.ENGINE)(t.CipherCtx.Engine.Engine())
 }
 
 func (t *TicketStore) digestEngine() *C.ENGINE {
 	if t.DigestCtx.Engine == nil {
 		return nil
 	}
-	return t.DigestCtx.Engine.e
+	return (*C.ENGINE)(t.DigestCtx.Engine.Engine())
 }
 
 const (
@@ -156,7 +158,7 @@ func go_ticket_key_cb_thunk(p unsafe.Pointer, s *C.SSL, key_name *C.uchar,
 			KeyNameSize)
 		C.EVP_EncryptInit_ex(
 			cctx,
-			store.CipherCtx.Cipher.ptr,
+			(*C.EVP_CIPHER)(store.CipherCtx.Cipher.Ptr()),
 			store.cipherEngine(),
 			(*C.uchar)(&key.CipherKey[0]),
 			(*C.uchar)(&key.IV[0]))
@@ -164,7 +166,7 @@ func go_ticket_key_cb_thunk(p unsafe.Pointer, s *C.SSL, key_name *C.uchar,
 			hctx,
 			unsafe.Pointer(&key.HMACKey[0]),
 			C.int(len(key.HMACKey)),
-			store.DigestCtx.Digest.ptr,
+			(*C.EVP_MD)(store.DigestCtx.Digest.Ptr()),
 			store.digestEngine())
 
 		return ticket_resp_sessionOk
@@ -186,7 +188,7 @@ func go_ticket_key_cb_thunk(p unsafe.Pointer, s *C.SSL, key_name *C.uchar,
 
 		C.EVP_DecryptInit_ex(
 			cctx,
-			store.CipherCtx.Cipher.ptr,
+			(*C.EVP_CIPHER)(store.CipherCtx.Cipher.Ptr()),
 			store.cipherEngine(),
 			(*C.uchar)(&key.CipherKey[0]),
 			(*C.uchar)(&key.IV[0]))
@@ -194,7 +196,7 @@ func go_ticket_key_cb_thunk(p unsafe.Pointer, s *C.SSL, key_name *C.uchar,
 			hctx,
 			unsafe.Pointer(&key.HMACKey[0]),
 			C.int(len(key.HMACKey)),
-			store.DigestCtx.Digest.ptr,
+			(*C.EVP_MD)(store.DigestCtx.Digest.Ptr()),
 			store.digestEngine())
 
 		if store.Keys.ShouldRenew(name) {

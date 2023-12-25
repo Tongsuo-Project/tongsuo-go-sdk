@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 const (
@@ -75,7 +77,7 @@ func TestNTLS(t *testing.T) {
 					t.Error(err)
 					return
 				}
-				signCert, err := LoadCertificateFromPEM(signCertPEM)
+				signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
 				if err != nil {
 					t.Error(err)
 					return
@@ -93,7 +95,7 @@ func TestNTLS(t *testing.T) {
 					t.Error(err)
 					return
 				}
-				signKey, err := LoadPrivateKeyFromPEM(signKeyPEM)
+				signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
 				if err != nil {
 					t.Error(err)
 					return
@@ -111,7 +113,7 @@ func TestNTLS(t *testing.T) {
 					t.Error(err)
 					return
 				}
-				encCert, err := LoadCertificateFromPEM(encCertPEM)
+				encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
 				if err != nil {
 					t.Error(err)
 					return
@@ -130,7 +132,7 @@ func TestNTLS(t *testing.T) {
 					return
 				}
 
-				encKey, err := LoadPrivateKeyFromPEM(encKeyPEM)
+				encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
 				if err != nil {
 					t.Error(err)
 					return
@@ -215,13 +217,13 @@ func newNTLSServer(t *testing.T, options ...func(sslctx *Ctx) error) (*echoServe
 		return nil, err
 	}
 
-	encCert, err := LoadCertificateFromPEM(encCertPEM)
+	encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
 	if err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	signCert, err := LoadCertificateFromPEM(signCertPEM)
+	signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
 	if err != nil {
 		t.Error(err)
 		return nil, err
@@ -249,13 +251,13 @@ func newNTLSServer(t *testing.T, options ...func(sslctx *Ctx) error) (*echoServe
 		return nil, err
 	}
 
-	encKey, err := LoadPrivateKeyFromPEM(encKeyPEM)
+	encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
 	if err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	signKey, err := LoadPrivateKeyFromPEM(signKeyPEM)
+	signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
 	if err != nil {
 		t.Error(err)
 		return nil, err

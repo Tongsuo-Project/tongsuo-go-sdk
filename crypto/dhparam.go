@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package crypto
 
 // #include "shim.h"
 import "C"
@@ -24,7 +24,11 @@ import (
 )
 
 type DH struct {
-	dh *C.struct_dh_st
+	dh *C.DH
+}
+
+func (dh *DH) GetDH() *C.DH {
+	return dh.dh
 }
 
 // LoadDHParametersFromPEM loads the Diffie-Hellman parameters from
@@ -49,16 +53,4 @@ func LoadDHParametersFromPEM(pem_block []byte) (*DH, error) {
 		C.DH_free(dhparams.dh)
 	})
 	return dhparams, nil
-}
-
-// SetDHParameters sets the DH group (DH parameters) used to
-// negotiate an emphemeral DH key during handshaking.
-func (c *Ctx) SetDHParameters(dh *DH) error {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	if int(C.X_SSL_CTX_set_tmp_dh(c.ctx, dh.dh)) != 1 {
-		return errorFromErrorQueue()
-	}
-	return nil
 }

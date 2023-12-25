@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package crypto
 
 // #include "shim.h"
 import "C"
@@ -39,14 +39,25 @@ const (
 )
 
 type CipherCtx interface {
+	Ctx() *C.EVP_CIPHER_CTX
 	Cipher() *Cipher
 	BlockSize() int
 	KeySize() int
 	IVSize() int
+	SetKeyAndIV(key, iv []byte) error
+	SetPadding(pad bool)
+	SetCtrl(code, arg int) error
+	SetCtrlBytes(code, arg int, value []byte) error
+	GetCtrlInt(code, arg int) (int, error)
+	GetCtrlBytes(code, arg, expectsize int) ([]byte, error)
 }
 
 type Cipher struct {
 	ptr *C.EVP_CIPHER
+}
+
+func (c *Cipher) Ptr() *C.EVP_CIPHER {
+	return c.ptr
 }
 
 func (c *Cipher) Nid() NID {
@@ -112,7 +123,7 @@ func newCipherCtx() (*cipherCtx, error) {
 	return ctx, nil
 }
 
-func (ctx *cipherCtx) applyKeyAndIV(key, iv []byte) error {
+func (ctx *cipherCtx) SetKeyAndIV(key, iv []byte) error {
 	var kptr, iptr *C.uchar
 	if key != nil {
 		if len(key) != ctx.KeySize() {
@@ -142,6 +153,10 @@ func (ctx *cipherCtx) applyKeyAndIV(key, iv []byte) error {
 	return nil
 }
 
+func (ctx *cipherCtx) Ctx() *C.EVP_CIPHER_CTX {
+	return ctx.ctx
+}
+
 func (ctx *cipherCtx) Cipher() *Cipher {
 	return &Cipher{ptr: C.X_EVP_CIPHER_CTX_cipher(ctx.ctx)}
 }
@@ -166,7 +181,7 @@ func (ctx *cipherCtx) SetPadding(pad bool) {
 	}
 }
 
-func (ctx *cipherCtx) setCtrl(code, arg int) error {
+func (ctx *cipherCtx) SetCtrl(code, arg int) error {
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg), nil)
 	if res != 1 {
 		return fmt.Errorf("failed to set code %d to %d [result %d]",
@@ -175,7 +190,7 @@ func (ctx *cipherCtx) setCtrl(code, arg int) error {
 	return nil
 }
 
-func (ctx *cipherCtx) setCtrlBytes(code, arg int, value []byte) error {
+func (ctx *cipherCtx) SetCtrlBytes(code, arg int, value []byte) error {
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg),
 		unsafe.Pointer(&value[0]))
 	if res != 1 {
@@ -185,7 +200,7 @@ func (ctx *cipherCtx) setCtrlBytes(code, arg int, value []byte) error {
 	return nil
 }
 
-func (ctx *cipherCtx) getCtrlInt(code, arg int) (int, error) {
+func (ctx *cipherCtx) GetCtrlInt(code, arg int) (int, error) {
 	var returnVal C.int
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg),
 		unsafe.Pointer(&returnVal))
@@ -196,7 +211,7 @@ func (ctx *cipherCtx) getCtrlInt(code, arg int) (int, error) {
 	return int(returnVal), nil
 }
 
-func (ctx *cipherCtx) getCtrlBytes(code, arg, expectsize int) ([]byte, error) {
+func (ctx *cipherCtx) GetCtrlBytes(code, arg, expectsize int) ([]byte, error) {
 	returnVal := make([]byte, expectsize)
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg),
 		unsafe.Pointer(&returnVal[0]))
@@ -251,12 +266,12 @@ func newEncryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
 	}
 	var eptr *C.ENGINE
 	if e != nil {
-		eptr = e.e
+		eptr = (*C.ENGINE)(e.Engine())
 	}
 	if 1 != C.EVP_EncryptInit_ex(ctx.ctx, c.ptr, eptr, nil, nil) {
 		return nil, errors.New("failed to initialize cipher context")
 	}
-	err = ctx.applyKeyAndIV(key, iv)
+	err = ctx.SetKeyAndIV(key, iv)
 	if err != nil {
 		return nil, err
 	}
@@ -274,12 +289,12 @@ func newDecryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
 	}
 	var eptr *C.ENGINE
 	if e != nil {
-		eptr = e.e
+		eptr = (*C.ENGINE)(e.Engine())
 	}
 	if 1 != C.EVP_DecryptInit_ex(ctx.ctx, c.ptr, eptr, nil, nil) {
 		return nil, errors.New("failed to initialize cipher context")
 	}
-	err = ctx.applyKeyAndIV(key, iv)
+	err = ctx.SetKeyAndIV(key, iv)
 	if err != nil {
 		return nil, err
 	}

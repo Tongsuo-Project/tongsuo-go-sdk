@@ -14,8 +14,8 @@
 
 package sha1
 
-// #include "../../shim.h"
-// #cgo linux CFLAGS: -Wno-deprecated-declarations -I/opt/tongsuo/include
+// #include "../shim.h"
+// #cgo linux CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
 // #cgo linux LDFLAGS: -L/opt/tongsuo/lib -lcrypto
 // #cgo darwin CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
 // #cgo darwin LDFLAGS: -L/opt/tongsuo/lib -lcrypto
@@ -28,17 +28,17 @@ import (
 	"runtime"
 	"unsafe"
 
-	tongsuogo "github.com/tongsuo-project/tongsuo-go-sdk"
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 type SHA1Hash struct {
 	ctx    *C.EVP_MD_CTX
-	engine *tongsuogo.Engine
+	engine *crypto.Engine
 }
 
 func New() (*SHA1Hash, error) { return NewWithEngine(nil) }
 
-func NewWithEngine(e *tongsuogo.Engine) (*SHA1Hash, error) {
+func NewWithEngine(e *crypto.Engine) (*SHA1Hash, error) {
 	hash := &SHA1Hash{engine: e}
 	hash.ctx = C.X_EVP_MD_CTX_new()
 	if hash.ctx == nil {

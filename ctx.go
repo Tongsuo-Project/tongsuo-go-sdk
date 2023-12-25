@@ -26,6 +26,8 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 var (
@@ -34,15 +36,15 @@ var (
 
 type Ctx struct {
 	ctx   *C.SSL_CTX
-	cert  *Certificate
-	chain []*Certificate
+	cert  *crypto.Certificate
+	chain []*crypto.Certificate
 
-	key       PrivateKey
+	key       crypto.PrivateKey
 	verify_cb VerifyCallback
 	sni_cb    TLSExtServernameCallback
 
-	encCert *Certificate
-	encKey  PrivateKey
+	encCert *crypto.Certificate
+	encKey  crypto.PrivateKey
 
 	ticket_store_mu sync.Mutex
 	ticket_store    *TicketStore
@@ -58,7 +60,7 @@ func newCtx(method *C.SSL_METHOD) (*Ctx, error) {
 	defer runtime.UnlockOSThread()
 	ctx := C.SSL_CTX_new(method)
 	if ctx == nil {
-		return nil, errorFromErrorQueue()
+		return nil, crypto.ErrorFromErrorQueue()
 	}
 	c := &Ctx{ctx: ctx}
 	C.SSL_CTX_set_ex_data(ctx, get_ssl_ctx_idx(), unsafe.Pointer(c.ctx))
@@ -145,7 +147,7 @@ func NewCtxFromFiles(cert_file string, key_file string) (*Ctx, error) {
 		return nil, fmt.Errorf("No PEM certificate found in '%s'", cert_file)
 	}
 	first, certs := certs[0], certs[1:]
-	cert, err := LoadCertificateFromPEM(first)
+	cert, err := crypto.LoadCertificateFromPEM(first)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +158,7 @@ func NewCtxFromFiles(cert_file string, key_file string) (*Ctx, error) {
 	}
 
 	for _, pem := range certs {
-		cert, err := LoadCertificateFromPEM(pem)
+		cert, err := crypto.LoadCertificateFromPEM(pem)
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +173,7 @@ func NewCtxFromFiles(cert_file string, key_file string) (*Ctx, error) {
 		return nil, err
 	}
 
-	key, err := LoadPrivateKeyFromPEM(key_bytes)
+	key, err := crypto.LoadPrivateKeyFromPEM(key_bytes)
 	if err != nil {
 		return nil, err
 	}
@@ -184,22 +186,9 @@ func NewCtxFromFiles(cert_file string, key_file string) (*Ctx, error) {
 	return ctx, nil
 }
 
-// EllipticCurve repesents the ASN.1 OID of an elliptic curve.
-// see https://www.openssl.org/docs/apps/ecparam.html for a list of implemented curves.
-type EllipticCurve int
-
-const (
-	// P-256: X9.62/SECG curve over a 256 bit prime field
-	Prime256v1 EllipticCurve = C.NID_X9_62_prime256v1
-	// P-384: NIST/SECG curve over a 384 bit prime field
-	Secp384r1 EllipticCurve = C.NID_secp384r1
-	// P-521: NIST/SECG curve over a 521 bit prime field
-	Secp521r1 EllipticCurve = C.NID_secp521r1
-)
-
 // SetEllipticCurve sets the elliptic curve used by the SSL context to
 // enable an ECDH cipher suite to be selected during the handshake.
-func (c *Ctx) SetEllipticCurve(curve EllipticCurve) error {
+func (c *Ctx) SetEllipticCurve(curve crypto.EllipticCurve) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -210,7 +199,7 @@ func (c *Ctx) SetEllipticCurve(curve EllipticCurve) error {
 	defer C.EC_KEY_free(k)
 
 	if int(C.X_SSL_CTX_set_tmp_ecdh(c.ctx, k)) != 1 {
-		return errorFromErrorQueue()
+		return crypto.ErrorFromErrorQueue()
 	}
 
 	return nil
@@ -218,48 +207,48 @@ func (c *Ctx) SetEllipticCurve(curve EllipticCurve) error {
 
 // UseSignCertificate configures the context to present the given sign certificate to
 // peers.
-func (c *Ctx) UseSignCertificate(cert *Certificate) error {
+func (c *Ctx) UseSignCertificate(cert *crypto.Certificate) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.cert = cert
-	if int(C.SSL_CTX_use_sign_certificate(c.ctx, cert.x)) != 1 {
-		return errorFromErrorQueue()
+	if int(C.SSL_CTX_use_sign_certificate(c.ctx, (*C.X509)(cert.GetCert()))) != 1 {
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
 
 // UseEncryptCertificate configures the context to present the given encrypt certificate to
 // peers.
-func (c *Ctx) UseEncryptCertificate(cert *Certificate) error {
+func (c *Ctx) UseEncryptCertificate(cert *crypto.Certificate) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.encCert = cert
-	if int(C.SSL_CTX_use_enc_certificate(c.ctx, cert.x)) != 1 {
-		return errorFromErrorQueue()
+	if int(C.SSL_CTX_use_enc_certificate(c.ctx, (*C.X509)(cert.GetCert()))) != 1 {
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
 
 // UseCertificate configures the context to present the given certificate to
 // peers.
-func (c *Ctx) UseCertificate(cert *Certificate) error {
+func (c *Ctx) UseCertificate(cert *crypto.Certificate) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.cert = cert
-	if int(C.SSL_CTX_use_certificate(c.ctx, cert.x)) != 1 {
-		return errorFromErrorQueue()
+	if int(C.SSL_CTX_use_certificate(c.ctx, (*C.X509)(cert.GetCert()))) != 1 {
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
 
 // AddChainCertificate adds a certificate to the chain presented in the
 // handshake.
-func (c *Ctx) AddChainCertificate(cert *Certificate) error {
+func (c *Ctx) AddChainCertificate(cert *crypto.Certificate) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.chain = append(c.chain, cert)
-	if int(C.X_SSL_CTX_add_extra_chain_cert(c.ctx, cert.x)) != 1 {
-		return errorFromErrorQueue()
+	if int(C.X_SSL_CTX_add_extra_chain_cert(c.ctx, (*C.X509)(cert.GetCert()))) != 1 {
+		return crypto.ErrorFromErrorQueue()
 	}
 	// OpenSSL takes ownership via SSL_CTX_add_extra_chain_cert
 	runtime.SetFinalizer(cert, nil)
@@ -268,36 +257,36 @@ func (c *Ctx) AddChainCertificate(cert *Certificate) error {
 
 // UseSignPrivateKey configures the context to use the given sign private key for SSL
 // handshakes.
-func (c *Ctx) UseSignPrivateKey(key PrivateKey) error {
+func (c *Ctx) UseSignPrivateKey(key crypto.PrivateKey) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.key = key
-	if int(C.SSL_CTX_use_sign_PrivateKey(c.ctx, key.evpPKey())) != 1 {
-		return errorFromErrorQueue()
+	if int(C.SSL_CTX_use_sign_PrivateKey(c.ctx, (*C.EVP_PKEY)(key.EvpPKey()))) != 1 {
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
 
 // UseEncryptPrivateKey configures the context to use the given encrypt private key for SSL
 // handshakes.
-func (c *Ctx) UseEncryptPrivateKey(key PrivateKey) error {
+func (c *Ctx) UseEncryptPrivateKey(key crypto.PrivateKey) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.encKey = key
-	if int(C.SSL_CTX_use_enc_PrivateKey(c.ctx, key.evpPKey())) != 1 {
-		return errorFromErrorQueue()
+	if int(C.SSL_CTX_use_enc_PrivateKey(c.ctx, (*C.EVP_PKEY)(key.EvpPKey()))) != 1 {
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
 
 // UsePrivateKey configures the context to use the given private key for SSL
 // handshakes.
-func (c *Ctx) UsePrivateKey(key PrivateKey) error {
+func (c *Ctx) UsePrivateKey(key crypto.PrivateKey) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.key = key
-	if int(C.SSL_CTX_use_PrivateKey(c.ctx, key.evpPKey())) != 1 {
-		return errorFromErrorQueue()
+	if int(C.SSL_CTX_use_PrivateKey(c.ctx, (*C.EVP_PKEY)(key.EvpPKey()))) != 1 {
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
@@ -306,7 +295,7 @@ type CertificateStore struct {
 	store *C.X509_STORE
 	// for GC
 	ctx   *Ctx
-	certs []*Certificate
+	certs []*crypto.Certificate
 }
 
 // Allocate a new, empty CertificateStore
@@ -326,7 +315,7 @@ func NewCertificateStore() (*CertificateStore, error) {
 func (s *CertificateStore) LoadCertificatesFromPEM(data []byte) error {
 	pems := SplitPEM(data)
 	for _, pem := range pems {
-		cert, err := LoadCertificateFromPEM(pem)
+		cert, err := crypto.LoadCertificateFromPEM(pem)
 		if err != nil {
 			return err
 		}
@@ -348,14 +337,26 @@ func (c *Ctx) GetCertificateStore() *CertificateStore {
 		ctx:   c}
 }
 
+// SetDHParameters sets the DH group (DH parameters) used to
+// negotiate an emphemeral DH key during handshaking.
+func (c *Ctx) SetDHParameters(dh *crypto.DH) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	if int(C.X_SSL_CTX_set_tmp_dh(c.ctx, (*C.DH)(dh.GetDH()))) != 1 {
+		return crypto.ErrorFromErrorQueue()
+	}
+	return nil
+}
+
 // AddCertificate marks the provided Certificate as a trusted certificate in
 // the given CertificateStore.
-func (s *CertificateStore) AddCertificate(cert *Certificate) error {
+func (s *CertificateStore) AddCertificate(cert *crypto.Certificate) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	s.certs = append(s.certs, cert)
-	if int(C.X509_STORE_add_cert(s.store, cert.x)) != 1 {
-		return errorFromErrorQueue()
+	if int(C.X509_STORE_add_cert(s.store, (*C.X509)(cert.GetCert()))) != 1 {
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
@@ -384,7 +385,7 @@ func (self *CertificateStoreCtx) Depth() int {
 
 // the certicate returned is only valid for the lifetime of the underlying
 // X509_STORE_CTX
-func (self *CertificateStoreCtx) GetCurrentCert() *Certificate {
+func (self *CertificateStoreCtx) GetCurrentCert() *crypto.Certificate {
 	x509 := C.X509_STORE_CTX_get_current_cert(self.ctx)
 	if x509 == nil {
 		return nil
@@ -393,11 +394,9 @@ func (self *CertificateStoreCtx) GetCurrentCert() *Certificate {
 	if 1 != C.X_X509_add_ref(x509) {
 		return nil
 	}
-	cert := &Certificate{
-		x: x509,
-	}
-	runtime.SetFinalizer(cert, func(cert *Certificate) {
-		C.X509_free(cert.x)
+	cert := crypto.NewCertWrapper((unsafe.Pointer(x509)))
+	runtime.SetFinalizer(cert, func(cert *crypto.Certificate) {
+		C.X509_free((*C.X509)(cert.GetCert()))
 	})
 	return cert
 }
@@ -413,10 +412,10 @@ func (c *Ctx) LoadVerifyLocations(ca_file string, ca_path string) error {
 
 	if ca_path == "" && ca_file == "" {
 		if C.SSL_CTX_set_default_verify_file(c.ctx) <= 0 {
-			return errorFromErrorQueue()
+			return crypto.ErrorFromErrorQueue()
 		}
 		if C.SSL_CTX_set_default_verify_dir(c.ctx) <= 0 {
-			return errorFromErrorQueue()
+			return crypto.ErrorFromErrorQueue()
 		}
 
 		return nil
@@ -433,7 +432,7 @@ func (c *Ctx) LoadVerifyLocations(ca_file string, ca_path string) error {
 	}
 
 	if C.SSL_CTX_load_verify_locations(c.ctx, c_ca_file, c_ca_path) <= 0 {
-		return errorFromErrorQueue()
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
@@ -581,7 +580,7 @@ func (c *Ctx) SetSessionId(session_id []byte) error {
 	}
 	if int(C.SSL_CTX_set_session_id_context(c.ctx, ptr,
 		C.uint(len(session_id)))) == 0 {
-		return errorFromErrorQueue()
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
@@ -595,7 +594,7 @@ func (c *Ctx) SetCipherList(list string) error {
 	clist := C.CString(list)
 	defer C.free(unsafe.Pointer(clist))
 	if int(C.SSL_CTX_set_cipher_list(c.ctx, clist)) == 0 {
-		return errorFromErrorQueue()
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }

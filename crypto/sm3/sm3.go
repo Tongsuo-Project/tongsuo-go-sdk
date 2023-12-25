@@ -1,21 +1,14 @@
-// Copyright (C) 2017. See AUTHORS.
+// Copyright 2023 The Tongsuo Project Authors. All Rights Reserved.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License 2.0 (the "License").  You may not use
+// this file except in compliance with the License.  You can obtain a copy
+// in the file LICENSE in the source distribution or at
+// https://github.com/Tongsuo-Project/tongsuo-go-sdk/blob/main/LICENSE
 
 package sm3
 
-// #include "../../shim.h"
-// #cgo linux CFLAGS: -Wno-deprecated-declarations -I/opt/tongsuo/include
+// #include "../shim.h"
+// #cgo linux CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
 // #cgo linux LDFLAGS: -L/opt/tongsuo/lib -lcrypto
 // #cgo darwin CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
 // #cgo darwin LDFLAGS: -L/opt/tongsuo/lib -lcrypto
@@ -29,7 +22,7 @@ import (
 	"runtime"
 	"unsafe"
 
-	tongsuogo "github.com/tongsuo-project/tongsuo-go-sdk"
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 const (
@@ -41,12 +34,12 @@ var _ hash.Hash = new(SM3)
 
 type SM3 struct {
 	ctx    *C.EVP_MD_CTX
-	engine *tongsuogo.Engine
+	engine *crypto.Engine
 }
 
 func New() (*SM3, error) { return NewWithEngine(nil) }
 
-func NewWithEngine(e *tongsuogo.Engine) (*SM3, error) {
+func NewWithEngine(e *crypto.Engine) (*SM3, error) {
 	h, err := newWithEngine(e)
 	if err != nil {
 		return nil, err
@@ -55,7 +48,7 @@ func NewWithEngine(e *tongsuogo.Engine) (*SM3, error) {
 	return h, nil
 }
 
-func newWithEngine(e *tongsuogo.Engine) (*SM3, error) {
+func newWithEngine(e *crypto.Engine) (*SM3, error) {
 	hash := &SM3{engine: e}
 	hash.ctx = C.X_EVP_MD_CTX_new()
 	if hash.ctx == nil {

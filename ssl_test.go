@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"github.com/tongsuo-project/tongsuo-go-sdk/utils"
 )
 
@@ -280,7 +281,7 @@ func ClosingTest(t testing.TB, constructor func(
 
 		go func() {
 			defer wg.Done()
-			data, err := ioutil.ReadAll(sslconn2)
+			data, err := io.ReadAll(sslconn2)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -377,7 +378,7 @@ func OpenSSLConstructor(t testing.TB, server_conn, client_conn net.Conn) (
 		t.Fatal(err)
 	}
 	ctx.SetVerify(VerifyNone, passThruVerify(t))
-	key, err := LoadPrivateKeyFromPEM(keyBytes)
+	key, err := crypto.LoadPrivateKeyFromPEM(keyBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +386,7 @@ func OpenSSLConstructor(t testing.TB, server_conn, client_conn net.Conn) (
 	if err != nil {
 		t.Fatal(err)
 	}
-	cert, err := LoadCertificateFromPEM(certBytes)
+	cert, err := crypto.LoadCertificateFromPEM(certBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +474,7 @@ func BenchmarkOpenSSLStdlibThroughput(b *testing.B) {
 
 func FullDuplexRenegotiationTest(t testing.TB, constructor func(
 	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn)) {
-
+	SSLRecordSize := 16 * 1024
 	server_conn, client_conn := NetPipe(t)
 	defer server_conn.Close()
 	defer client_conn.Close()
@@ -657,7 +658,7 @@ func TestOpenSSLLotsOfConns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := LoadPrivateKeyFromPEM(keyBytes)
+	key, err := crypto.LoadPrivateKeyFromPEM(keyBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -665,7 +666,7 @@ func TestOpenSSLLotsOfConns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cert, err := LoadCertificateFromPEM(certBytes)
+	cert, err := crypto.LoadCertificateFromPEM(certBytes)
 	if err != nil {
 		t.Fatal(err)
 	}

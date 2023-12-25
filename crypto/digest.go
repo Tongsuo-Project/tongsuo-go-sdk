@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package crypto
 
 // #include "shim.h"
 import "C"
@@ -25,6 +25,10 @@ import (
 // Digest represents and openssl message digest.
 type Digest struct {
 	ptr *C.EVP_MD
+}
+
+func (d *Digest) Ptr() *C.EVP_MD {
+	return d.ptr
 }
 
 // GetDigestByName returns the Digest with the name or nil and an error if the

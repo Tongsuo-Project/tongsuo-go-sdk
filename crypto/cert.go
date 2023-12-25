@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package crypto
 
 // #include "shim.h"
 import "C"
@@ -72,6 +72,14 @@ type CertificateInfo struct {
 
 type Name struct {
 	name *C.X509_NAME
+}
+
+func NewCertWrapper(x unsafe.Pointer, ref ...interface{}) *Certificate {
+	if len(ref) > 0 {
+		return &Certificate{x: (*C.X509)(x), ref: ref[0]}
+	} else {
+		return &Certificate{x: (*C.X509)(x)}
+	}
 }
 
 // Allocate and return a new Name object.
@@ -161,6 +169,10 @@ func NewCertificate(info *CertificateInfo, key PublicKey) (*Certificate, error) 
 		return nil, err
 	}
 	return c, nil
+}
+
+func (c *Certificate) GetCert() *C.X509 {
+	return c.x
 }
 
 func (c *Certificate) GetSubjectName() (*Name, error) {
@@ -253,7 +265,7 @@ func (c *Certificate) SetExpireDate(when time.Duration) error {
 // SetPubKey assigns a new public key to a certificate.
 func (c *Certificate) SetPubKey(pubKey PublicKey) error {
 	c.pubKey = pubKey
-	if C.X509_set_pubkey(c.x, pubKey.evpPKey()) != 1 {
+	if C.X509_set_pubkey(c.x, pubKey.EvpPKey()) != 1 {
 		return errors.New("failed to set public key")
 	}
 	return nil
@@ -275,7 +287,7 @@ func (c *Certificate) Sign(privKey PrivateKey, digest EVP_MD) error {
 
 func (c *Certificate) insecureSign(privKey PrivateKey, digest EVP_MD) error {
 	var md *C.EVP_MD = getDigestFunction(digest)
-	if C.X509_sign(c.x, privKey.evpPKey(), md) <= 0 {
+	if C.X509_sign(c.x, privKey.EvpPKey(), md) <= 0 {
 		return errors.New("failed to sign certificate")
 	}
 	return nil
@@ -324,7 +336,7 @@ func LoadCertificateFromPEM(pem_block []byte) (*Certificate, error) {
 	cert := C.PEM_read_bio_X509(bio, nil, nil, nil)
 	C.BIO_free(bio)
 	if cert == nil {
-		return nil, errorFromErrorQueue()
+		return nil, ErrorFromErrorQueue()
 	}
 	x := &Certificate{x: cert}
 	runtime.SetFinalizer(x, func(x *Certificate) {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package crypto
 
 // #include "shim.h"
 import "C"
@@ -43,7 +43,7 @@ func NewHMACWithEngine(key []byte, digestAlgorithm EVP_MD, e *Engine) (*HMAC, er
 
 	var c_e *C.ENGINE
 	if e != nil {
-		c_e = e.e
+		c_e = (*C.ENGINE)(e.Engine())
 	}
 	if rc := C.X_HMAC_Init_ex(h.ctx,
 		unsafe.Pointer(&key[0]),

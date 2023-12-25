@@ -27,6 +27,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"github.com/tongsuo-project/tongsuo-go-sdk/utils"
 )
 
@@ -42,8 +43,8 @@ type Conn struct {
 
 	conn             net.Conn
 	ctx              *Ctx // for gc
-	into_ssl         *readBio
-	from_ssl         *writeBio
+	into_ssl         *crypto.ReadBio
+	from_ssl         *crypto.WriteBio
 	is_shutdown      bool
 	mtx              sync.Mutex
 	want_read_future *utils.Future
@@ -104,7 +105,7 @@ func newSSL(ctx *C.SSL_CTX) (*C.SSL, error) {
 	defer runtime.UnlockOSThread()
 	ssl := C.SSL_new(ctx)
 	if ssl == nil {
-		return nil, errorFromErrorQueue()
+		return nil, crypto.ErrorFromErrorQueue()
 	}
 	return ssl, nil
 }
@@ -115,26 +116,26 @@ func newConn(conn net.Conn, ctx *Ctx) (*Conn, error) {
 		return nil, err
 	}
 
-	into_ssl := &readBio{}
-	from_ssl := &writeBio{}
+	into_ssl := &crypto.ReadBio{}
+	from_ssl := &crypto.WriteBio{}
 
 	if ctx.GetMode()&ReleaseBuffers > 0 {
-		into_ssl.release_buffers = true
-		from_ssl.release_buffers = true
+		into_ssl.SetRelease(true)
+		from_ssl.SetRelease(true)
 	}
 
 	into_ssl_cbio := into_ssl.MakeCBIO()
 	from_ssl_cbio := from_ssl.MakeCBIO()
 	if into_ssl_cbio == nil || from_ssl_cbio == nil {
 		// these frees are null safe
-		C.BIO_free(into_ssl_cbio)
-		C.BIO_free(from_ssl_cbio)
+		C.BIO_free((*C.BIO)(into_ssl_cbio))
+		C.BIO_free((*C.BIO)(from_ssl_cbio))
 		C.SSL_free(ssl)
 		return nil, errors.New("failed to allocate memory BIO")
 	}
 
 	// the ssl object takes ownership of these objects now
-	C.SSL_set_bio(ssl, into_ssl_cbio, from_ssl_cbio)
+	C.SSL_set_bio(ssl, (*C.BIO)(into_ssl_cbio), (*C.BIO)(from_ssl_cbio))
 
 	s := &SSL{ssl: ssl}
 	C.SSL_set_ex_data(s.ssl, get_ssl_idx(), unsafe.Pointer(s.ssl))
@@ -275,14 +276,14 @@ func (c *Conn) getErrorHandler(rv C.int, errno error) func() error {
 			case -1:
 				err = errno
 			default:
-				err = errorFromErrorQueue()
+				err = crypto.ErrorFromErrorQueue()
 			}
 		} else {
-			err = errorFromErrorQueue()
+			err = crypto.ErrorFromErrorQueue()
 		}
 		return func() error { return err }
 	default:
-		err := errorFromErrorQueue()
+		err := crypto.ErrorFromErrorQueue()
 		return func() error { return err }
 	}
 }
@@ -322,7 +323,7 @@ func (c *Conn) Handshake() error {
 
 // PeerCertificate returns the Certificate of the peer with which you're
 // communicating. Only valid after a handshake.
-func (c *Conn) PeerCertificate() (*Certificate, error) {
+func (c *Conn) PeerCertificate() (*crypto.Certificate, error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	if c.is_shutdown {
@@ -332,9 +333,9 @@ func (c *Conn) PeerCertificate() (*Certificate, error) {
 	if x == nil {
 		return nil, errors.New("no peer certificate found")
 	}
-	cert := &Certificate{x: x}
-	runtime.SetFinalizer(cert, func(cert *Certificate) {
-		C.X509_free(cert.x)
+	cert := crypto.NewCertWrapper(unsafe.Pointer(x))
+	runtime.SetFinalizer(cert, func(cert *crypto.Certificate) {
+		C.X509_free((*C.X509)(cert.GetCert()))
 	})
 	return cert, nil
 }
@@ -342,15 +343,15 @@ func (c *Conn) PeerCertificate() (*Certificate, error) {
 // loadCertificateStack loads up a stack of x509 certificates and returns them,
 // handling memory ownership.
 func (c *Conn) loadCertificateStack(sk *C.struct_stack_st_X509) (
-	rv []*Certificate) {
+	rv []*crypto.Certificate) {
 
 	sk_num := int(C.X_sk_X509_num(sk))
-	rv = make([]*Certificate, 0, sk_num)
+	rv = make([]*crypto.Certificate, 0, sk_num)
 	for i := 0; i < sk_num; i++ {
 		x := C.X_sk_X509_value(sk, C.int(i))
 		// ref holds on to the underlying connection memory so we don't need to
 		// worry about incrementing refcounts manually or freeing the X509
-		rv = append(rv, &Certificate{x: x, ref: c})
+		rv = append(rv, crypto.NewCertWrapper(unsafe.Pointer(x), c))
 	}
 	return rv
 }
@@ -359,7 +360,7 @@ func (c *Conn) loadCertificateStack(sk *C.struct_stack_st_X509) (
 // the client side, the stack also contains the peer's certificate; if called
 // on the server side, the peer's certificate must be obtained separately using
 // PeerCertificate.
-func (c *Conn) PeerCertificateChain() (rv []*Certificate, err error) {
+func (c *Conn) PeerCertificateChain() (rv []*crypto.Certificate, err error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	if c.is_shutdown {
@@ -373,9 +374,9 @@ func (c *Conn) PeerCertificateChain() (rv []*Certificate, err error) {
 }
 
 type ConnectionState struct {
-	Certificate           *Certificate
+	Certificate           *crypto.Certificate
 	CertificateError      error
-	CertificateChain      []*Certificate
+	CertificateChain      []*crypto.Certificate
 	CertificateChainError error
 	SessionReused         bool
 }
@@ -569,7 +570,7 @@ func (c *Conn) SetTlsExtHostName(name string) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if C.X_SSL_set_tlsext_host_name(c.ssl, cname) == 0 {
-		return errorFromErrorQueue()
+		return crypto.ErrorFromErrorQueue()
 	}
 	return nil
 }
@@ -617,13 +618,13 @@ func (c *Conn) setSession(session []byte) error {
 	ptr := (*C.uchar)(&session[0])
 	s := C.d2i_SSL_SESSION(nil, &ptr, C.long(len(session)))
 	if s == nil {
-		return fmt.Errorf("unable to load session: %s", errorFromErrorQueue())
+		return fmt.Errorf("unable to load session: %s", crypto.ErrorFromErrorQueue())
 	}
 	defer C.SSL_SESSION_free(s)
 
 	ret := C.SSL_set_session(c.ssl, s)
 	if ret != 1 {
-		return fmt.Errorf("unable to set session: %s", errorFromErrorQueue())
+		return fmt.Errorf("unable to set session: %s", crypto.ErrorFromErrorQueue())
 	}
 	return nil
 }

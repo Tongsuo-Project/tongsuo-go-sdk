@@ -22,21 +22,19 @@ jobs:
         gofmt-path: './'
         gofmt-flags: '-l -d'
 
-    - name: Clone TongSuo repository
+    - name: Clone Tongsuo
       uses: actions/checkout@v3
       with:
         repository: Tongsuo-Project/Tongsuo
         path: tongsuo
         ref: 8.3-stable
 
-    - name: Build  Tongsuo
-      run: cd tongsuo &&  ./config --prefix=/opt/tongsuo -Wl,-rpath,/opt/tongsuo/lib  enable-ssl-trace enable-ec_elgamal enable-ntls && make -j && make install
-
-    - name: Check Tongsuo lib
-      run: ls /opt/tongsuo/lib
-
-    - name: Check Tongsuo binary
-      run: ldd /opt/tongsuo/bin/openssl 
+    - name: Build Tongsuo
+      run: |
+        cd tongsuo
+        ./config --prefix=/opt/tongsuo --libdir=/opt/tongsuo/lib enable-ntls
+        make -j4
+        make install
 
     - name: Go Mod
       run: go mod tidy
@@ -48,4 +46,4 @@ jobs:
       run: go build
 
     - name: Test
-      run: go test -exec "env LD_LIBRARY_PATH=/opt/tongsuo/lib" ./...
+      run: LD_LIBRARY_PATH=/opt/tongsuo/lib go test ./...

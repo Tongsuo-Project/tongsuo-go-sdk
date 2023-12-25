@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//   http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package crypto
 
 // #include "shim.h"
 import "C"
@@ -44,16 +44,16 @@ func nonCopyCString(data *C.char, size C.int) []byte {
 
 var writeBioMapping = newMapping()
 
-type writeBio struct {
+type WriteBio struct {
 	data_mtx        sync.Mutex
 	op_mtx          sync.Mutex
 	buf             []byte
 	release_buffers bool
 }
 
-func loadWritePtr(b *C.BIO) *writeBio {
+func loadWritePtr(b *C.BIO) *WriteBio {
 	t := token(C.X_BIO_get_data(b))
-	return (*writeBio)(writeBioMapping.Get(t))
+	return (*WriteBio)(writeBioMapping.Get(t))
 }
 
 func bioClearRetryFlags(b *C.BIO) {
@@ -112,7 +112,7 @@ func writeBioPending(b *C.BIO) C.long {
 	return C.long(len(ptr.buf))
 }
 
-func (b *writeBio) WriteTo(w io.Writer) (rv int64, err error) {
+func (b *WriteBio) WriteTo(w io.Writer) (rv int64, err error) {
 	b.op_mtx.Lock()
 	defer b.op_mtx.Unlock()
 
@@ -137,14 +137,20 @@ func (b *writeBio) WriteTo(w io.Writer) (rv int64, err error) {
 	return int64(n), err
 }
 
-func (self *writeBio) Disconnect(b *C.BIO) {
+func (b *WriteBio) SetRelease(flag bool) {
+	b.data_mtx.Lock()
+	defer b.data_mtx.Unlock()
+	b.release_buffers = flag
+}
+
+func (self *WriteBio) Disconnect(b *C.BIO) {
 	if loadWritePtr(b) == self {
 		writeBioMapping.Del(token(C.X_BIO_get_data(b)))
 		C.X_BIO_set_data(b, nil)
 	}
 }
 
-func (b *writeBio) MakeCBIO() *C.BIO {
+func (b *WriteBio) MakeCBIO() *C.BIO {
 	rv := C.X_BIO_new_write_bio()
 	token := writeBioMapping.Add(unsafe.Pointer(b))
 	C.X_BIO_set_data(rv, unsafe.Pointer(token))
@@ -153,7 +159,7 @@ func (b *writeBio) MakeCBIO() *C.BIO {
 
 var readBioMapping = newMapping()
 
-type readBio struct {
+type ReadBio struct {
 	data_mtx        sync.Mutex
 	op_mtx          sync.Mutex
 	buf             []byte
@@ -161,8 +167,8 @@ type readBio struct {
 	release_buffers bool
 }
 
-func loadReadPtr(b *C.BIO) *readBio {
-	return (*readBio)(readBioMapping.Get(token(C.X_BIO_get_data(b))))
+func loadReadPtr(b *C.BIO) *ReadBio {
+	return (*ReadBio)(readBioMapping.Get(token(C.X_BIO_get_data(b))))
 }
 
 //export go_read_bio_read
@@ -228,7 +234,13 @@ func readBioPending(b *C.BIO) C.long {
 	return C.long(len(ptr.buf))
 }
 
-func (b *readBio) ReadFromOnce(r io.Reader) (n int, err error) {
+func (b *ReadBio) SetRelease(flag bool) {
+	b.data_mtx.Lock()
+	defer b.data_mtx.Unlock()
+	b.release_buffers = flag
+}
+
+func (b *ReadBio) ReadFromOnce(r io.Reader) (n int, err error) {
 	b.op_mtx.Lock()
 	defer b.op_mtx.Unlock()
 
@@ -257,21 +269,21 @@ func (b *readBio) ReadFromOnce(r io.Reader) (n int, err error) {
 	return n, err
 }
 
-func (b *readBio) MakeCBIO() *C.BIO {
+func (b *ReadBio) MakeCBIO() *C.BIO {
 	rv := C.X_BIO_new_read_bio()
 	token := readBioMapping.Add(unsafe.Pointer(b))
 	C.X_BIO_set_data(rv, unsafe.Pointer(token))
 	return rv
 }
 
-func (self *readBio) Disconnect(b *C.BIO) {
+func (self *ReadBio) Disconnect(b *C.BIO) {
 	if loadReadPtr(b) == self {
 		readBioMapping.Del(token(C.X_BIO_get_data(b)))
 		C.X_BIO_set_data(b, nil)
 	}
 }
 
-func (b *readBio) MarkEOF() {
+func (b *ReadBio) MarkEOF() {
 	b.data_mtx.Lock()
 	defer b.data_mtx.Unlock()
 	b.eof = true
