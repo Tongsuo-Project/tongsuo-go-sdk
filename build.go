@@ -17,7 +17,7 @@
 
 package tongsuogo
 
-// #cgo linux CFLAGS: -Wno-deprecated-declarations -I/opt/tongsuo/include
+// #cgo linux CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
 // #cgo linux LDFLAGS: -L/opt/tongsuo/lib -lssl -lcrypto
 // #cgo darwin CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
 // #cgo darwin LDFLAGS: -L/opt/tongsuo/lib -lssl -lcrypto
