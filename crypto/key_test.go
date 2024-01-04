@@ -119,6 +119,32 @@ ADBGAiEA6PWNjm4B6zs3Wcha9qyDdfo1ILhHfk9rZEAGrnfyc2UCIQD1IDVJUkI4
 J/QVoOtP5DOdRPs/3XFy0Bk0qH+Uj5D7LQ==
 -----END CERTIFICATE-----
 `)
+	sm2KeyBytes = []byte(`-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIJ0I4yR5ezlVWygUi7+NNipNJSBqUjaCopitIJMU1nlSoAoGCCqBHM9V
+AYItoUQDQgAEMbiGjBxkDrC1rwuVlIC/6fbGdnaKxj2/Lkv9EcOLKv3WFuFi1eae
+UvQSkNcRMdaAixpM+RKQ+Cp6Z3szJUr0jQ==
+-----END EC PRIVATE KEY-----
+`)
+	sm2CertBytes = []byte(`-----BEGIN CERTIFICATE-----
+MIIDKjCCAs+gAwIBAgIQILmubp7njmhGt3wZLFwx6jAKBggqgRzPVQGDdTBtMQsw
+CQYDVQQGEwJDTjELMAkGA1UECAwCSFoxDDAKBgNVBAoMA2FsaTEMMAoGA1UECwwD
+YW50MRcwFQYDVQQDDA53d3cubWlkZGxlLmNvbTEcMBoGCSqGSIb3DQEJARYNdGVz
+dEB0ZXN0LmNvbTAeFw0yMDA0MTQwOTA3MzlaFw0zMDA0MTIwOTA3MzlaME0xCzAJ
+BgNVBAYTAkNOMQswCQYDVQQIDAJIWjEMMAoGA1UECgwDYWxpMQwwCgYDVQQLDANh
+bnQxFTATBgNVBAMMDCouYWxpcGF5LmNvbTBZMBMGByqGSM49AgEGCCqBHM9VAYIt
+A0IABDG4howcZA6wta8LlZSAv+n2xnZ2isY9vy5L/RHDiyr91hbhYtXmnlL0EpDX
+ETHWgIsaTPkSkPgqemd7MyVK9I2jggFvMIIBazAJBgNVHRMEAjAAMBEGCWCGSAGG
++EIBAQQEAwIGQDAzBglghkgBhvhCAQ0EJhYkT3BlblNTTCBHZW5lcmF0ZWQgU2Vy
+dmVyIENlcnRpZmljYXRlMB0GA1UdDgQWBBQpsBvv0pBVShGKj2Ib3MLqCr7Y8DCB
+rAYDVR0jBIGkMIGhgBRxUGhXcyoi1ubSkgs6CcVWWABhXqF3pHUwczELMAkGA1UE
+BhMCQ04xCzAJBgNVBAgMAkhaMQwwCgYDVQQKDANhbGkxDDAKBgNVBAsMA2FudDEY
+MBYGA1UEAwwPd3d3LmV4YW1wbGUuY29tMSEwHwYJKoZIhvcNAQkBFhJjbGllbnRA
+ZXhhbXBsZS5jb22CECC5rm6e545oRrd8GSxcMegwDgYDVR0PAQH/BAQDAgWgMBMG
+A1UdJQQMMAoGCCsGAQUFBwMBMCMGA1UdEQQcMBqCCmFsaXBheS5jb22CDCouYWxp
+cGF5LmNvbTAKBggqgRzPVQGDdQNJADBGAiEAmuMCuZKaF3zVYc1T6DGGi0+hmMuZ
+jpH7uznwqix7GJsCIQCOjB/iG+WxOvUz//t//Ru1QnVivDaCEQXkW2dXyX+fWg==
+-----END CERTIFICATE-----
+`)
 	ed25519CertBytes = []byte(`-----BEGIN CERTIFICATE-----
 MIIBIzCB1gIUd0UUPX+qHrSKSVN9V/A3F1Eeti4wBQYDK2VwMDYxCzAJBgNVBAYT
 AnVzMQ0wCwYDVQQKDARDU0NPMRgwFgYDVQQDDA9lZDI1NTE5X3Jvb3RfY2EwHhcN
@@ -365,6 +391,28 @@ func TestSignEC(t *testing.T) {
 	})
 }
 
+func TestSignSM2(t *testing.T) {
+	t.Parallel()
+
+	key, err := GenerateECKey(Sm2Curve)
+	if err != nil {
+		t.Error(err)
+	}
+	data := []byte("the quick brown fox jumps over the lazy dog")
+
+	t.Run("sm2", func(t *testing.T) {
+		t.Parallel()
+		sig, err := key.SignPKCS1v15(SM3_Method, data)
+		if err != nil {
+			t.Error(err)
+		}
+		err = key.VerifyPKCS1v15(SM3_Method, data, sig)
+		if err != nil {
+			t.Error(err)
+		}
+	})
+}
+
 func TestSignED25519(t *testing.T) {
 	if !ed25519_support {
 		t.SkipNow()
@@ -507,6 +555,43 @@ func TestMarshalEC(t *testing.T) {
 		ioutil.WriteFile("generated", []byte(hex.Dump(new_der_from_pem)), 0644)
 		ioutil.WriteFile("hardcoded", []byte(hex.Dump(tls_der)), 0644)
 		t.Error("invalid public key der bytes")
+	}
+}
+
+func TestMarshalSM2(t *testing.T) {
+	key, err := LoadPrivateKeyFromPEM(sm2KeyBytes)
+	if err != nil {
+		t.Error(err)
+	}
+	cert, err := LoadCertificateFromPEM(sm2CertBytes)
+	if err != nil {
+		t.Error(err)
+	}
+
+	privateBlock, _ := pem_pkg.Decode(sm2KeyBytes)
+	key, err = LoadPrivateKeyFromDER(privateBlock.Bytes)
+	if err != nil {
+		t.Error(err)
+	}
+
+	pem, err := cert.MarshalPEM()
+	if err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(pem, sm2CertBytes) {
+		ioutil.WriteFile("generated", pem, 0644)
+		ioutil.WriteFile("hardcoded", sm2CertBytes, 0644)
+		t.Error("invalid cert pem bytes")
+	}
+
+	pem, err = key.MarshalPKCS1PrivateKeyPEM()
+	if err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(pem, sm2KeyBytes) {
+		ioutil.WriteFile("generated", pem, 0644)
+		ioutil.WriteFile("hardcoded", sm2KeyBytes, 0644)
+		t.Error("invalid private key pem bytes")
 	}
 }
 

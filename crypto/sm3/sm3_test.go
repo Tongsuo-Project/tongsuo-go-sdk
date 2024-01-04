@@ -32,7 +32,7 @@ func TestSM3(t *testing.T) {
 
 	for _, tt := range testData {
 		buf, _ := hex.DecodeString(tt.in)
-		got := SM3Sum(buf)
+		got := Sum(buf)
 		expected, _ := hex.DecodeString(tt.out)
 
 		if !bytes.Equal(expected, got[:]) {
@@ -56,13 +56,13 @@ func benchmarkSM3(b *testing.B, length int64, fn sm3func) {
 }
 
 func BenchmarkSM3Large(b *testing.B) {
-	benchmarkSM3(b, 1024*1024, func(buf []byte) { SM3Sum(buf) })
+	benchmarkSM3(b, 1024*1024, func(buf []byte) { Sum(buf) })
 }
 
 func BenchmarkSM3Normal(b *testing.B) {
-	benchmarkSM3(b, 1024, func(buf []byte) { SM3Sum(buf) })
+	benchmarkSM3(b, 1024, func(buf []byte) { Sum(buf) })
 }
 
 func BenchmarkSM3Small(b *testing.B) {
-	benchmarkSM3(b, 1, func(buf []byte) { SM3Sum(buf) })
+	benchmarkSM3(b, 1, func(buf []byte) { Sum(buf) })
 }

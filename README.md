@@ -2,6 +2,13 @@
 
 Tongsuo bindings for Go.
 
+## Feature
+
+- Symmetric algorithms: SM4
+- Digital signature algorithms: SM2withSM3
+- Hash algorithms: SM3, MD5, SHA1, SHA256
+- Secure transport protocol: TLCP, TLSv1.0/1.1/1.2/1.3
+
 ## quick start
 
 ### Install Tongsuo
@@ -25,13 +32,13 @@ make install
 On Linux:
 
 ```bash
-LD_LIBRARY_PATH=/opt/tongsuo/lib go test ./...
+LD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go test ./...
 ```
 
 On MacOS:
 
 ```bash
-DYLD_LIBRARY_PATH=/opt/tongsuo/lib go test ./...
+DYLD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go test ./...
 ```
 
 ### Run example
@@ -39,15 +46,11 @@ DYLD_LIBRARY_PATH=/opt/tongsuo/lib go test ./...
 On Linux:
 
 ```bash
-cd examples/sm4
-go build
-LD_LIBRARY_PATH=/opt/tongsuo/lib ./sm4
+LD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go run examples/sm4/sm4
 ```
 
 On MacOS:
 
 ```bash
-cd examples/sm4
-go build
-DYLD_LIBRARY_PATH=/opt/tongsuo/lib ./sm4
+DYLD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go run examples/sm4/sm4.go
 ```

@@ -17,10 +17,8 @@
 
 package tongsuogo
 
-// #cgo linux CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
-// #cgo linux LDFLAGS: -extldflags -static -L/opt/tongsuo/lib -lssl -lcrypto
-// #cgo darwin CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
-// #cgo darwin LDFLAGS: -extldflags -static -L/opt/tongsuo/lib -lssl -lcrypto
+// #cgo linux LDFLAGS: -extldflags -static -lssl -lcrypto
+// #cgo darwin LDFLAGS: -extldflags -static -lssl -lcrypto
 // #cgo windows CFLAGS: -DWIN32_LEAN_AND_MEAN
 // #cgo windows pkg-config: libssl libcrypto
 import "C"
