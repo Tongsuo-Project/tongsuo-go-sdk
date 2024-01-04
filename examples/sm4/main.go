@@ -10,6 +10,7 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"log"
 
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
@@ -37,6 +38,12 @@ func sm4CBCEncrypt() {
 	if !bytes.Equal(cipherText, actualCipherText) {
 		log.Fatalf("exp:%x got:%x", cipherText, actualCipherText)
 	}
+
+	fmt.Println("[sm4CBCEncrypt]")
+	fmt.Println("Key=", hex.EncodeToString(key))
+	fmt.Println("IV=", hex.EncodeToString(iv))
+	fmt.Println("plainText=", hex.EncodeToString(plainText))
+	fmt.Println("cipherText=", hex.EncodeToString(cipherText))
 }
 
 func sm4CBCDecrypt() {
@@ -60,6 +67,12 @@ func sm4CBCDecrypt() {
 	if !bytes.Equal(plainText, actualPlainText) {
 		log.Fatalf("exp:%x got:%x", plainText, actualPlainText)
 	}
+
+	fmt.Println("[sm4CBCDecrypt]")
+	fmt.Println("Key=", hex.EncodeToString(key))
+	fmt.Println("IV=", hex.EncodeToString(iv))
+	fmt.Println("cipherText=", hex.EncodeToString(cipherText))
+	fmt.Println("plainText=", hex.EncodeToString(plainText))
 }
 
 func sm4GCMEncrypt() {
@@ -94,6 +107,14 @@ func sm4GCMEncrypt() {
 	if !bytes.Equal(tag, actualTag) {
 		log.Fatalf("exp:%x got:%x", tag, actualTag)
 	}
+
+	fmt.Println("[sm4GCMEncrypt]")
+	fmt.Println("Key=", hex.EncodeToString(key))
+	fmt.Println("IV=", hex.EncodeToString(iv))
+	fmt.Println("AAD=", hex.EncodeToString(aad))
+	fmt.Println("plainText=", hex.EncodeToString(plainText))
+	fmt.Println("cipherText=", hex.EncodeToString(cipherText))
+	fmt.Println("tag=", hex.EncodeToString(tag))
 }
 
 func sm4GCMDecrypt() {
@@ -120,6 +141,14 @@ func sm4GCMDecrypt() {
 	if !bytes.Equal(plainText, actualPlainText) {
 		log.Fatalf("exp:%x got:%x", plainText, actualPlainText)
 	}
+
+	fmt.Println("[sm4GCMDecrypt]")
+	fmt.Println("Key=", hex.EncodeToString(key))
+	fmt.Println("IV=", hex.EncodeToString(iv))
+	fmt.Println("AAD=", hex.EncodeToString(aad))
+	fmt.Println("tag=", hex.EncodeToString(tag))
+	fmt.Println("cipherText=", hex.EncodeToString(cipherText))
+	fmt.Println("plainText=", hex.EncodeToString(plainText))
 }
 
 func main() {

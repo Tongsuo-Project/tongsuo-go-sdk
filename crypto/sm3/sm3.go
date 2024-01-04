@@ -8,10 +8,8 @@
 package sm3
 
 // #include "../shim.h"
-// #cgo linux CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
-// #cgo linux LDFLAGS: -L/opt/tongsuo/lib -lcrypto
-// #cgo darwin CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
-// #cgo darwin LDFLAGS: -L/opt/tongsuo/lib -lcrypto
+// #cgo linux LDFLAGS: -lcrypto
+// #cgo darwin LDFLAGS: -lcrypto
 // #cgo windows CFLAGS: -DWIN32_LEAN_AND_MEAN
 // #cgo windows pkg-config: libcrypto
 import "C"
@@ -106,7 +104,7 @@ func (s *SM3) checkSum() (result [SM3_DIGEST_LENGTH]byte) {
 	return result
 }
 
-func SM3Sum(data []byte) (result [SM3_DIGEST_LENGTH]byte) {
+func Sum(data []byte) (result [SM3_DIGEST_LENGTH]byte) {
 	C.X_EVP_Digest(
 		unsafe.Pointer(&data[0]),
 		C.size_t(len(data)),

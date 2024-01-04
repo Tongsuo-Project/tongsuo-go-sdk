@@ -10,10 +10,8 @@
 
 package crypto
 
-// #cgo linux CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
-// #cgo linux LDFLAGS: -L/opt/tongsuo/lib -lcrypto
-// #cgo darwin CFLAGS: -I/opt/tongsuo/include -Wno-deprecated-declarations
-// #cgo darwin LDFLAGS: -L/opt/tongsuo/lib -lcrypto
+// #cgo linux LDFLAGS: -lcrypto
+// #cgo darwin LDFLAGS: -lcrypto
 // #cgo windows CFLAGS: -DWIN32_LEAN_AND_MEAN
 // #cgo windows pkg-config: libcrypto
 import "C"

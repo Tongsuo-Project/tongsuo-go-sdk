@@ -16,7 +16,7 @@ import (
 
 func main() {
 	msg := "hello world"
-	fmt.Printf("%x\n", sm3.SM3Sum([]byte(msg)))
+	fmt.Printf("SM3(%s)=%x\n", msg, sm3.Sum([]byte(msg)))
 
 	h, err := sm3.New()
 	if err != nil {
@@ -32,5 +32,5 @@ func main() {
 
 	var res [sm3.SM3_DIGEST_LENGTH]byte
 
-	fmt.Printf("%x\n", h.Sum(res[:0]))
+	fmt.Printf("SM3(%s)=%x\n", msg, h.Sum(res[:0]))
 }
