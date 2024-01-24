@@ -44,6 +44,8 @@ extern int X_BIO_write(BIO *b, const void *buf, int len);
 extern BIO *X_BIO_new_write_bio();
 extern BIO *X_BIO_new_read_bio();
 
+extern int X_BN_num_bytes(const BIGNUM *a);
+
 /* EVP methods */
 extern const int X_ED25519_SUPPORT;
 extern int X_EVP_PKEY_ED25519;
@@ -68,9 +70,9 @@ extern int X_EVP_MD_size(const EVP_MD *md);
 extern int X_EVP_DigestInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl);
 extern int X_EVP_DigestUpdate(EVP_MD_CTX *ctx, const void *d, size_t cnt);
 extern int X_EVP_DigestFinal_ex(EVP_MD_CTX *ctx, unsigned char *md, unsigned int *s);
-extern int X_EVP_SignInit(EVP_MD_CTX *ctx, const EVP_MD *type);
-extern int X_EVP_SignUpdate(EVP_MD_CTX *ctx, const void *d, unsigned int cnt);
 extern int X_EVP_DigestSignInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx, const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey);
+extern int X_EVP_DigestSignUpdate(EVP_MD_CTX *ctx, const void *d, size_t cnt);
+extern int X_EVP_DigestSignFinal(EVP_MD_CTX *ctx, unsigned char *sig, size_t *siglen);
 extern int X_EVP_DigestSign(EVP_MD_CTX *ctx, unsigned char *sigret, size_t *siglen, const unsigned char *tbs, size_t tbslen);
 extern int X_EVP_Digest(const void *data, size_t count, unsigned char *md, unsigned int *size, const EVP_MD *type, ENGINE *impl);
 extern EVP_PKEY *X_EVP_PKEY_new(void);
@@ -79,11 +81,9 @@ extern int X_EVP_PKEY_size(EVP_PKEY *pkey);
 extern struct rsa_st *X_EVP_PKEY_get1_RSA(EVP_PKEY *pkey);
 extern int X_EVP_PKEY_set1_RSA(EVP_PKEY *pkey, struct rsa_st *key);
 extern int X_EVP_PKEY_assign_charp(EVP_PKEY *pkey, int type, char *key);
-extern int X_EVP_SignFinal(EVP_MD_CTX *ctx, unsigned char *md, unsigned int *s, EVP_PKEY *pkey);
-extern int X_EVP_VerifyInit(EVP_MD_CTX *ctx, const EVP_MD *type);
-extern int X_EVP_VerifyUpdate(EVP_MD_CTX *ctx, const void *d, unsigned int cnt);
-extern int X_EVP_VerifyFinal(EVP_MD_CTX *ctx, const unsigned char *sigbuf, unsigned int siglen, EVP_PKEY *pkey);
 extern int X_EVP_DigestVerifyInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx, const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey);
+extern int X_EVP_DigestVerifyUpdate(EVP_MD_CTX *ctx, const void *d, size_t cnt);
+extern int X_EVP_DigestVerifyFinal(EVP_MD_CTX *ctx, const unsigned char *sig, size_t siglen);
 extern int X_EVP_DigestVerify(EVP_MD_CTX *ctx, const unsigned char *sigret, size_t siglen, const unsigned char *tbs, size_t tbslen);
 extern int X_EVP_CIPHER_block_size(EVP_CIPHER *c);
 extern int X_EVP_CIPHER_key_length(EVP_CIPHER *c);
@@ -96,6 +96,8 @@ extern void X_EVP_CIPHER_CTX_set_padding(EVP_CIPHER_CTX *ctx, int padding);
 extern const EVP_CIPHER *X_EVP_CIPHER_CTX_cipher(EVP_CIPHER_CTX *ctx);
 extern int X_EVP_CIPHER_CTX_encrypting(const EVP_CIPHER_CTX *ctx);
 extern int X_EVP_PKEY_CTX_set_ec_paramgen_curve_nid(EVP_PKEY_CTX *ctx, int nid);
+extern int X_EVP_PKEY_CTX_set1_id(EVP_PKEY_CTX *ctx, void *id, int id_len);
+extern int X_EVP_PKEY_is_sm2(EVP_PKEY *pkey);
 
 /* HMAC methods */
 extern size_t X_HMAC_size(const HMAC_CTX *e);
@@ -113,3 +115,6 @@ extern int X_X509_set_version(X509 *x, long version);
 
 /* PEM methods */
 extern int X_PEM_write_bio_PrivateKey_traditional(BIO *bio, EVP_PKEY *key, const EVP_CIPHER *enc, unsigned char *kstr, int klen, pem_password_cb *cb, void *u);
+
+/* ASN.1 methods */
+extern ECDSA_SIG *X_d2i_ECDSA_SIG(ECDSA_SIG **psig, const unsigned char **ppin, long len);

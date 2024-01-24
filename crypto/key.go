@@ -34,6 +34,7 @@ var (
 	SHA1_Method   Method = C.X_EVP_sha1()
 	SHA256_Method Method = C.X_EVP_sha256()
 	SHA512_Method Method = C.X_EVP_sha512()
+	SM3_Method    Method = C.X_EVP_sm3()
 )
 
 // Constants for the various key types.
@@ -58,6 +59,7 @@ const (
 	KeyTypeX448    = NID_X448
 	KeyTypeED25519 = NID_ED25519
 	KeyTypeED448   = NID_ED448
+	KeyTypeSM2     = NID_sm2
 )
 
 type PublicKey interface {
@@ -91,6 +93,9 @@ type PublicKey interface {
 type PrivateKey interface {
 	PublicKey
 
+	// Return public key
+	Public() PublicKey
+
 	// Signs the data using PKCS1.15
 	SignPKCS1v15(Method, []byte) ([]byte, error)
 
@@ -117,6 +122,20 @@ func (key *pKey) BaseType() NID {
 	return NID(C.EVP_PKEY_base_id(key.key))
 }
 
+func (key *pKey) Public() PublicKey {
+	der, err := key.MarshalPKIXPublicKeyDER()
+	if err != nil {
+		return nil
+	}
+
+	pub, err := LoadPublicKeyFromDER(der)
+	if err != nil {
+		return nil
+	}
+
+	return pub
+}
+
 func (key *pKey) SignPKCS1v15(method Method, data []byte) ([]byte, error) {
 
 	ctx := C.X_EVP_MD_CTX_new()
@@ -124,7 +143,6 @@ func (key *pKey) SignPKCS1v15(method Method, data []byte) ([]byte, error) {
 
 	if key.KeyType() == KeyTypeED25519 {
 		// do ED specific one-shot sign
-
 		if method != nil || len(data) == 0 {
 			return nil, errors.New("signpkcs1v15: 0-length data or non-null digest")
 		}
@@ -146,21 +164,25 @@ func (key *pKey) SignPKCS1v15(method Method, data []byte) ([]byte, error) {
 
 		return sig[:sigblen], nil
 	} else {
-		if 1 != C.X_EVP_SignInit(ctx, method) {
+		if 1 != C.X_EVP_DigestSignInit(ctx, nil, method, nil, key.key) {
 			return nil, errors.New("signpkcs1v15: failed to init signature")
 		}
+
 		if len(data) > 0 {
-			if 1 != C.X_EVP_SignUpdate(
-				ctx, unsafe.Pointer(&data[0]), C.uint(len(data))) {
+			if 1 != C.X_EVP_DigestSignUpdate(
+				ctx, unsafe.Pointer(&data[0]), C.size_t(len(data))) {
 				return nil, errors.New("signpkcs1v15: failed to update signature")
 			}
 		}
-		sig := make([]byte, C.X_EVP_PKEY_size(key.key))
-		var sigblen C.uint
-		if 1 != C.X_EVP_SignFinal(ctx,
-			((*C.uchar)(unsafe.Pointer(&sig[0]))), &sigblen, key.key) {
+
+		var sigblen C.size_t = C.size_t(C.X_EVP_PKEY_size(key.key))
+		sig := make([]byte, sigblen)
+
+		if 1 != C.X_EVP_DigestSignFinal(ctx,
+			((*C.uchar)(unsafe.Pointer(&sig[0]))), &sigblen) {
 			return nil, errors.New("signpkcs1v15: failed to finalize signature")
 		}
+
 		return sig[:sigblen], nil
 	}
 }
@@ -191,19 +213,22 @@ func (key *pKey) VerifyPKCS1v15(method Method, data, sig []byte) error {
 		return nil
 
 	} else {
-		if 1 != C.X_EVP_VerifyInit(ctx, method) {
+		if 1 != C.X_EVP_DigestVerifyInit(ctx, nil, method, nil, key.key) {
 			return errors.New("verifypkcs1v15: failed to init verify")
 		}
+
 		if len(data) > 0 {
-			if 1 != C.X_EVP_VerifyUpdate(
-				ctx, unsafe.Pointer(&data[0]), C.uint(len(data))) {
+			if 1 != C.X_EVP_DigestVerifyUpdate(
+				ctx, unsafe.Pointer(&data[0]), C.size_t(len(data))) {
 				return errors.New("verifypkcs1v15: failed to update verify")
 			}
 		}
-		if 1 != C.X_EVP_VerifyFinal(ctx,
-			((*C.uchar)(unsafe.Pointer(&sig[0]))), C.uint(len(sig)), key.key) {
+
+		if 1 != C.X_EVP_DigestVerifyFinal(ctx,
+			((*C.uchar)(unsafe.Pointer(&sig[0]))), C.size_t(len(sig))) {
 			return errors.New("verifypkcs1v15: failed to finalize verify")
 		}
+
 		return nil
 	}
 }
@@ -293,6 +318,13 @@ func LoadPrivateKeyFromPEM(pem_block []byte) (PrivateKey, error) {
 	runtime.SetFinalizer(p, func(p *pKey) {
 		C.X_EVP_PKEY_free(p.key)
 	})
+
+	if C.X_EVP_PKEY_is_sm2(p.key) == 1 {
+		if C.EVP_PKEY_set_alias_type(p.key, C.EVP_PKEY_SM2) != 1 {
+			return nil, errors.New("failed set alias type")
+		}
+	}
+
 	return p, nil
 }
 
@@ -438,6 +470,8 @@ const (
 	Secp384r1 EllipticCurve = C.NID_secp384r1
 	// P-521: NIST/SECG curve over a 521 bit prime field
 	Secp521r1 EllipticCurve = C.NID_secp521r1
+	// SM2:	GB/T 32918-2017
+	Sm2Curve EllipticCurve = C.NID_sm2
 )
 
 // GenerateECKey generates a new elliptic curve private key on the speicified
@@ -451,9 +485,15 @@ func GenerateECKey(curve EllipticCurve) (PrivateKey, error) {
 	}
 	defer C.EVP_PKEY_CTX_free(paramCtx)
 
-	// Intialize the parameter generation
-	if int(C.EVP_PKEY_paramgen_init(paramCtx)) != 1 {
-		return nil, errors.New("failed initializing EC parameter generation context")
+	if curve == Sm2Curve {
+		if C.EVP_PKEY_keygen_init(paramCtx) != 1 {
+			return nil, errors.New("failed initializing EC key generation context")
+		}
+	} else {
+		// Intialize the parameter generation
+		if int(C.EVP_PKEY_paramgen_init(paramCtx)) != 1 {
+			return nil, errors.New("failed initializing EC parameter generation context")
+		}
 	}
 
 	// Set curve in EC parameter generation context
@@ -461,33 +501,47 @@ func GenerateECKey(curve EllipticCurve) (PrivateKey, error) {
 		return nil, errors.New("failed setting curve in EC parameter generation context")
 	}
 
-	// Create parameter object
-	var params *C.EVP_PKEY
-	if int(C.EVP_PKEY_paramgen(paramCtx, &params)) != 1 {
-		return nil, errors.New("failed creating EC key generation parameters")
-	}
-	defer C.EVP_PKEY_free(params)
-
-	// Create context for the key generation
-	keyCtx := C.EVP_PKEY_CTX_new(params, nil)
-	if keyCtx == nil {
-		return nil, errors.New("failed creating EC key generation context")
-	}
-	defer C.EVP_PKEY_CTX_free(keyCtx)
-
-	// Generate the key
 	var privKey *C.EVP_PKEY
-	if int(C.EVP_PKEY_keygen_init(keyCtx)) != 1 {
-		return nil, errors.New("failed initializing EC key generation context")
-	}
-	if int(C.EVP_PKEY_keygen(keyCtx, &privKey)) != 1 {
-		return nil, errors.New("failed generating EC private key")
+
+	if curve == Sm2Curve {
+		if int(C.EVP_PKEY_keygen(paramCtx, &privKey)) != 1 {
+			return nil, errors.New("failed generating EC private key")
+		}
+	} else {
+		// Create parameter object
+		var params *C.EVP_PKEY
+		if int(C.EVP_PKEY_paramgen(paramCtx, &params)) != 1 {
+			return nil, errors.New("failed creating EC key generation parameters")
+		}
+		defer C.EVP_PKEY_free(params)
+
+		// Create context for the key generation
+		keyCtx := C.EVP_PKEY_CTX_new(params, nil)
+		if keyCtx == nil {
+			return nil, errors.New("failed creating EC key generation context")
+		}
+		defer C.EVP_PKEY_CTX_free(keyCtx)
+
+		if int(C.EVP_PKEY_keygen_init(keyCtx)) != 1 {
+			return nil, errors.New("failed initializing EC key generation context")
+		}
+
+		if int(C.EVP_PKEY_keygen(keyCtx, &privKey)) != 1 {
+			return nil, errors.New("failed generating EC private key")
+		}
 	}
 
 	p := &pKey{key: privKey}
 	runtime.SetFinalizer(p, func(p *pKey) {
 		C.X_EVP_PKEY_free(p.key)
 	})
+
+	if curve == Sm2Curve {
+		if C.EVP_PKEY_set_alias_type(p.key, C.EVP_PKEY_SM2) != 1 {
+			return nil, errors.New("failed set alias type")
+		}
+	}
+
 	return p, nil
 }
 

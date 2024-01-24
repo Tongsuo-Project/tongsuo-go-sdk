@@ -40,10 +40,37 @@ jobs:
       run: go mod tidy
 
     - name: Go vet Check
-      run: go vet ./...
+      run: LD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-Wall -I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go vet ./...
 
     - name: Build
-      run: go build
+      run: CGO_CFLAGS="-Wall -I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go build
 
     - name: Test
-      run: LD_LIBRARY_PATH=/opt/tongsuo/lib go test ./...
+      run: LD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-Wall -I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go test ./...
+
+  build_static:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19
+
+    - name: Clone Tongsuo
+      uses: actions/checkout@v3
+      with:
+        repository: Tongsuo-Project/Tongsuo
+        path: tongsuo
+        ref: 8.3-stable
+
+    - name: Build Tongsuo Static
+      run: |
+        cd tongsuo
+        ./config --prefix=/opt/tongsuo --libdir=/opt/tongsuo/lib enable-ntls no-shared
+        make -j4
+        make install
+
+    - name: Test
+      run: LD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-Wall -I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go test ./...

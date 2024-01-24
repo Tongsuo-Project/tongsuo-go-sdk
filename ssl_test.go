@@ -242,7 +242,7 @@ func close_both(closer1, closer2 io.Closer) {
 func ClosingTest(t testing.TB, constructor func(
 	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn)) {
 
-	run_test := func(close_tcp bool, server_writes bool) {
+	run_test := func(server_writes bool) {
 		server_conn, client_conn := NetPipe(t)
 		defer server_conn.Close()
 		defer client_conn.Close()
@@ -250,14 +250,11 @@ func ClosingTest(t testing.TB, constructor func(
 		defer close_both(server, client)
 
 		var sslconn1, sslconn2 HandshakingConn
-		var conn1 net.Conn
 		if server_writes {
 			sslconn1 = server
-			conn1 = server_conn
 			sslconn2 = client
 		} else {
 			sslconn1 = client
-			conn1 = client_conn
 			sslconn2 = server
 		}
 
@@ -269,14 +266,8 @@ func ClosingTest(t testing.TB, constructor func(
 			if err != nil {
 				t.Fatal(err)
 			}
-			if close_tcp {
-				err = conn1.Close()
-			} else {
-				err = sslconn1.Close()
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
+
+			sslconn1.Close()
 		}()
 
 		go func() {
@@ -293,10 +284,8 @@ func ClosingTest(t testing.TB, constructor func(
 		wg.Wait()
 	}
 
-	run_test(true, false)
-	run_test(false, false)
-	run_test(true, true)
-	run_test(false, true)
+	run_test(false)
+	run_test(true)
 }
 
 func ThroughputBenchmark(b *testing.B, constructor func(

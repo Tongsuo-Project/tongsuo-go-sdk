@@ -36,7 +36,7 @@ static int go_write_bio_puts(BIO *b, const char *str) {
 }
 
 const EVP_MD *X_EVP_sm3() {
-       return EVP_sm3();
+	return EVP_sm3();
 }
 
 const int X_ED25519_SUPPORT = 1;
@@ -49,8 +49,19 @@ int X_EVP_Digest(const void *data, size_t count,
 }
 
 int X_EVP_DigestSignInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx,
-		const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey){
+		const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey)
+{
 	return EVP_DigestSignInit(ctx, pctx, type, e, pkey);
+}
+
+int X_EVP_DigestSignUpdate(EVP_MD_CTX *ctx, const void *d, size_t cnt)
+{
+	return EVP_DigestSignUpdate(ctx, d, cnt);
+}
+
+int X_EVP_DigestSignFinal(EVP_MD_CTX *ctx, unsigned char *sig, size_t *siglen)
+{
+	return EVP_DigestSignFinal(ctx, sig, siglen);
 }
 
 int X_EVP_DigestSign(EVP_MD_CTX *ctx, unsigned char *sigret,
@@ -60,8 +71,19 @@ int X_EVP_DigestSign(EVP_MD_CTX *ctx, unsigned char *sigret,
 
 
 int X_EVP_DigestVerifyInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx,
-		const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey){
+		const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey)
+{
 	return EVP_DigestVerifyInit(ctx, pctx, type, e, pkey);
+}
+
+int X_EVP_DigestVerifyUpdate(EVP_MD_CTX *ctx, const void *d, size_t cnt)
+{
+	return EVP_DigestVerifyUpdate(ctx, d, cnt);
+}
+
+int X_EVP_DigestVerifyFinal(EVP_MD_CTX *ctx, const unsigned char *sig, size_t siglen)
+{
+	return EVP_DigestVerifyFinal(ctx, sig, siglen);
 }
 
 int X_EVP_DigestVerify(EVP_MD_CTX *ctx, const unsigned char *sigret,
@@ -246,6 +268,11 @@ BIO *X_BIO_new_read_bio() {
 	return BIO_new(BIO_s_readBio());
 }
 
+int X_BN_num_bytes(const BIGNUM *a)
+{
+	return BN_num_bytes(a);
+}
+
 const EVP_MD *X_EVP_get_digestbyname(const char *name) {
 	return EVP_get_digestbyname(name);
 }
@@ -304,14 +331,6 @@ int X_EVP_DigestFinal_ex(EVP_MD_CTX *ctx, unsigned char *md, unsigned int *s) {
 	return EVP_DigestFinal_ex(ctx, md, s);
 }
 
-int X_EVP_SignInit(EVP_MD_CTX *ctx, const EVP_MD *type) {
-	return EVP_SignInit(ctx, type);
-}
-
-int X_EVP_SignUpdate(EVP_MD_CTX *ctx, const void *d, unsigned int cnt) {
-	return EVP_SignUpdate(ctx, d, cnt);
-}
-
 EVP_PKEY *X_EVP_PKEY_new(void) {
 	return EVP_PKEY_new();
 }
@@ -334,23 +353,6 @@ int X_EVP_PKEY_set1_RSA(EVP_PKEY *pkey, struct rsa_st *key) {
 
 int X_EVP_PKEY_assign_charp(EVP_PKEY *pkey, int type, char *key) {
 	return EVP_PKEY_assign(pkey, type, key);
-}
-
-int X_EVP_SignFinal(EVP_MD_CTX *ctx, unsigned char *md, unsigned int *s, EVP_PKEY *pkey) {
-	return EVP_SignFinal(ctx, md, s, pkey);
-}
-
-int X_EVP_VerifyInit(EVP_MD_CTX *ctx, const EVP_MD *type) {
-	return EVP_VerifyInit(ctx, type);
-}
-
-int X_EVP_VerifyUpdate(EVP_MD_CTX *ctx, const void *d,
-		unsigned int cnt) {
-	return EVP_VerifyUpdate(ctx, d, cnt);
-}
-
-int X_EVP_VerifyFinal(EVP_MD_CTX *ctx, const unsigned char *sigbuf, unsigned int siglen, EVP_PKEY *pkey) {
-	return EVP_VerifyFinal(ctx, sigbuf, siglen, pkey);
 }
 
 int X_EVP_CIPHER_block_size(EVP_CIPHER *c) {
@@ -395,6 +397,16 @@ int X_EVP_PKEY_CTX_set_ec_paramgen_curve_nid(EVP_PKEY_CTX *ctx, int nid) {
 	return EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx, nid);
 }
 
+int X_EVP_PKEY_CTX_set1_id(EVP_PKEY_CTX *ctx, void *id, int id_len)
+{
+	return EVP_PKEY_CTX_set1_id(ctx, id, id_len);
+}
+
+int X_EVP_PKEY_is_sm2(EVP_PKEY *pkey)
+{
+	return EVP_PKEY_is_sm2(pkey);
+}
+
 size_t X_HMAC_size(const HMAC_CTX *e) {
 	return HMAC_size(e);
 }
@@ -417,4 +429,9 @@ long X_X509_get_version(const X509 *x) {
 
 int X_X509_set_version(X509 *x, long version) {
 	return X509_set_version(x, version);
+}
+
+ECDSA_SIG *X_d2i_ECDSA_SIG(ECDSA_SIG **psig, const unsigned char **ppin, long len)
+{
+	return d2i_ECDSA_SIG(psig, ppin, len);
 }

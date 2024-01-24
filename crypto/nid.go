@@ -207,4 +207,5 @@ const (
 	NID_X448                               NID = 1035
 	NID_ED25519                            NID = 1087
 	NID_ED448                              NID = 1088
+	NID_sm2                                NID = 1172
 )
