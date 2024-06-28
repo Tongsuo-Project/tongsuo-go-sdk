@@ -114,3 +114,5 @@ func GenerateKey() (crypto.PrivateKey, error) {
 
 	return priv, nil
 }
+
+// Encrypt encrypts the data with the private key, priv.
