@@ -115,4 +115,38 @@ func GenerateKey() (crypto.PrivateKey, error) {
 	return priv, nil
 }
 
-// Encrypt encrypts the data with the private key, priv.
+// Encrypt encrypts the data with the public key, publ.
+func Encrypt(publ crypto.PublicKey, data []byte) (r, s *big.Int, err error) {
+	if publ.KeyType() != crypto.NID_sm2 {
+		return nil, nil, errors.New("SM2: key type is not sm2")
+	}
+
+	sig, err := priv.SignPKCS1v15(crypto.SM3_Method, data)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	buf := (*C.uchar)(C.malloc(C.size_t(len(sig))))
+	defer C.free(unsafe.Pointer(buf))
+	C.memcpy(unsafe.Pointer(buf), unsafe.Pointer(&sig[0]), C.size_t(len(sig)))
+
+	sm2Sig := C.d2i_ECDSA_SIG(nil, &buf, C.long(len(sig)))
+	if sm2Sig == nil {
+		return nil, nil, err
+	}
+	defer C.ECDSA_SIG_free(sm2Sig)
+
+	var rBig, sBig *C.BIGNUM
+	C.ECDSA_SIG_get0(sm2Sig, &rBig, &sBig)
+
+	rBytes := make([]byte, C.X_BN_num_bytes(rBig))
+	sBytes := make([]byte, C.X_BN_num_bytes(sBig))
+
+	rLen := C.BN_bn2bin(rBig, (*C.uchar)(unsafe.Pointer(&rBytes[0])))
+	sLen := C.BN_bn2bin(sBig, (*C.uchar)(unsafe.Pointer(&sBytes[0])))
+
+	r = new(big.Int).SetBytes(rBytes[:rLen])
+	s = new(big.Int).SetBytes(sBytes[:sLen])
+
+	return r, s, nil
+}
