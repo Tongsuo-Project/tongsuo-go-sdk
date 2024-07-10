@@ -148,7 +148,7 @@ func (key *pKey) SignPKCS1v15(method Method, data []byte) ([]byte, error) {
 	defer C.X_EVP_MD_CTX_free(ctx)
 
 	if key.KeyType() == KeyTypeED25519 {
-		// do ED specific one-shot sign, 这里存疑，是否为method == nil
+		// do ED specific one-shot sign
 		if method != nil || len(data) == 0 {
 			return nil, errors.New("signpkcs1v15: 0-length data or non-null digest")
 		}
@@ -247,7 +247,7 @@ func (key *pKey) Encrypt(data []byte) ([]byte, error) {
 		return nil, errors.New("encrypt: failed to init encryption")
 	}
 
-	var enclen C.size_t = C.size_t(64 + 32 + len(data))
+	var enclen C.size_t
 	if 1 != C.EVP_PKEY_encrypt(ctx, nil, &enclen,
 		(*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data))) {
 		return nil, errors.New("encrypt: failed to determine encryption length")
@@ -275,7 +275,7 @@ func (key *pKey) Decrypt(data []byte) ([]byte, error) {
 		return nil, errors.New("decrypt: failed to init decryption")
 	}
 
-	var declen C.size_t = C.size_t(len(data))
+	var declen C.size_t
 	if 1 != C.EVP_PKEY_decrypt(ctx, nil, &declen,
 		(*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data))) {
 		return nil, errors.New("decrypt: failed to determine decryption length")

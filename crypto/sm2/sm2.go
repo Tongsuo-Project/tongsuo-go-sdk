@@ -121,15 +121,7 @@ func Encrypt(pub crypto.PublicKey, data []byte) ([]byte, error) {
 		return nil, errors.New("SM2: key type is not sm2")
 	}
 
-	enc, err := pub.Encrypt(data)
-	if err != nil {
-		return nil, err
-	}
-	//buf := (*C.uchar)(C.malloc(C.size_t(len(enc))))
-	//defer C.free(unsafe.Pointer(buf))
-	//C.memcpy(unsafe.Pointer(buf), unsafe.Pointer(&enc[0]), C.size_t(len(enc)))
-
-	return enc, err
+	return pub.Encrypt(data)
 }
 
 // Decrypt decrypts the ciphertext with the private key, priv.
