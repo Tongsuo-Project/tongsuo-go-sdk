@@ -142,3 +142,51 @@ func TestNewSM2VerifySign(t *testing.T) {
 		t.Fatal()
 	}
 }
+
+func TestSM2DecryptEncrypt(t *testing.T) {
+	priv, err := crypto.LoadPrivateKeyFromPEM(sm2_key1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pub := priv.Public()
+	data := []byte("hello world")
+
+	ciphertext, err := Encrypt(pub, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plaintext, err := Decrypt(priv, ciphertext)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(plaintext) != string(data) {
+		t.Fatal()
+	}
+}
+
+func TestNewSM2DecryptEncrypt(t *testing.T) {
+	priv, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pub := priv.Public()
+	data := []byte("hello world")
+
+	ciphertext, err := Encrypt(pub, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plaintext, err := Decrypt(priv, ciphertext)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(plaintext) != string(data) {
+		t.Fatal()
+	}
+}
