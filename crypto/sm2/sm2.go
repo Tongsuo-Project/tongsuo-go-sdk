@@ -114,3 +114,21 @@ func GenerateKey() (crypto.PrivateKey, error) {
 
 	return priv, nil
 }
+
+// Encrypt encrypts the data with the public key, publ.
+func Encrypt(pub crypto.PublicKey, data []byte) ([]byte, error) {
+	if pub.KeyType() != crypto.NID_sm2 {
+		return nil, errors.New("SM2: key type is not sm2")
+	}
+
+	return pub.Encrypt(data)
+}
+
+// Decrypt decrypts the ciphertext with the private key, priv.
+func Decrypt(priv crypto.PrivateKey, data []byte) ([]byte, error) {
+	if priv.KeyType() != crypto.NID_sm2 {
+		return nil, errors.New("SM2: key type is not sm2")
+	}
+
+	return priv.Decrypt(data)
+}

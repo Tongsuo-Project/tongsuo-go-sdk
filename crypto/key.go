@@ -63,8 +63,11 @@ const (
 )
 
 type PublicKey interface {
-	// Verifies the data signature using PKCS1.15
+	// VerifyPKCS1v15 verifies the data signature using PKCS1.15
 	VerifyPKCS1v15(method Method, data, sig []byte) error
+
+	// Encrypt encrypts the data using SM2
+	Encrypt(data []byte) ([]byte, error)
 
 	// MarshalPKIXPublicKeyPEM converts the public key to PEM-encoded PKIX
 	// format
@@ -93,11 +96,14 @@ type PublicKey interface {
 type PrivateKey interface {
 	PublicKey
 
-	// Return public key
+	// Public return public key
 	Public() PublicKey
 
-	// Signs the data using PKCS1.15
+	// SignPKCS1v15 signs the data using PKCS1.15
 	SignPKCS1v15(Method, []byte) ([]byte, error)
+
+	// Decrypt decrypts the data using SM2
+	Decrypt(data []byte) ([]byte, error)
 
 	// MarshalPKCS1PrivateKeyPEM converts the private key to PEM-encoded PKCS1
 	// format
@@ -155,7 +161,7 @@ func (key *pKey) SignPKCS1v15(method Method, data []byte) ([]byte, error) {
 		sig := make([]byte, 64, 64)
 		var sigblen C.size_t = 64
 		if 1 != C.X_EVP_DigestSign(ctx,
-			((*C.uchar)(unsafe.Pointer(&sig[0]))),
+			(*C.uchar)(unsafe.Pointer(&sig[0])),
 			&sigblen,
 			(*C.uchar)(unsafe.Pointer(&data[0])),
 			C.size_t(len(data))) {
@@ -179,7 +185,7 @@ func (key *pKey) SignPKCS1v15(method Method, data []byte) ([]byte, error) {
 		sig := make([]byte, sigblen)
 
 		if 1 != C.X_EVP_DigestSignFinal(ctx,
-			((*C.uchar)(unsafe.Pointer(&sig[0]))), &sigblen) {
+			(*C.uchar)(unsafe.Pointer(&sig[0])), &sigblen) {
 			return nil, errors.New("signpkcs1v15: failed to finalize signature")
 		}
 
@@ -225,12 +231,65 @@ func (key *pKey) VerifyPKCS1v15(method Method, data, sig []byte) error {
 		}
 
 		if 1 != C.X_EVP_DigestVerifyFinal(ctx,
-			((*C.uchar)(unsafe.Pointer(&sig[0]))), C.size_t(len(sig))) {
+			(*C.uchar)(unsafe.Pointer(&sig[0])), C.size_t(len(sig))) {
 			return errors.New("verifypkcs1v15: failed to finalize verify")
 		}
 
 		return nil
 	}
+}
+
+func (key *pKey) Encrypt(data []byte) ([]byte, error) {
+	ctx := C.EVP_PKEY_CTX_new(key.key, nil)
+	defer C.EVP_PKEY_CTX_free(ctx)
+
+	if 1 != C.EVP_PKEY_encrypt_init(ctx) {
+		return nil, errors.New("encrypt: failed to init encryption")
+	}
+
+	var enclen C.size_t
+	if 1 != C.EVP_PKEY_encrypt(ctx, nil, &enclen,
+		(*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data))) {
+		return nil, errors.New("encrypt: failed to determine encryption length")
+	}
+
+	enc := make([]byte, enclen)
+
+	if 1 != C.EVP_PKEY_encrypt(ctx,
+		(*C.uchar)(unsafe.Pointer(&enc[0])), &enclen,
+		(*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data))) {
+		return nil, errors.New("encrypt: failed to finish encryption")
+	}
+
+	return enc[:enclen], nil
+}
+
+func (key *pKey) Decrypt(data []byte) ([]byte, error) {
+	ctx := C.EVP_PKEY_CTX_new(key.key, nil)
+	if ctx == nil {
+		return nil, errors.New("decrypt: failed to create context")
+	}
+	defer C.EVP_PKEY_CTX_free(ctx)
+
+	if 1 != C.EVP_PKEY_decrypt_init(ctx) {
+		return nil, errors.New("decrypt: failed to init decryption")
+	}
+
+	var declen C.size_t
+	if 1 != C.EVP_PKEY_decrypt(ctx, nil, &declen,
+		(*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data))) {
+		return nil, errors.New("decrypt: failed to determine decryption length")
+	}
+
+	dec := make([]byte, declen)
+
+	if 1 != C.EVP_PKEY_decrypt(ctx,
+		(*C.uchar)(unsafe.Pointer(&dec[0])), &declen,
+		(*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data))) {
+		return nil, errors.New("decrypt: failed to finish decryption")
+	}
+
+	return dec[:declen], nil
 }
 
 func (key *pKey) MarshalPKCS1PrivateKeyPEM() (pem_block []byte,
