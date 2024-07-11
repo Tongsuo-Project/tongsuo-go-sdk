@@ -42,6 +42,28 @@ func TestCertGenerate(t *testing.T) {
 	}
 }
 
+func TestCertGenerateSM2(t *testing.T) {
+	key, err := GenerateECKey(Sm2Curve)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &CertificateInfo{
+		Serial:       big.NewInt(int64(1)),
+		Issued:       0,
+		Expires:      24 * time.Hour,
+		Country:      "US",
+		Organization: "Test",
+		CommonName:   "localhost",
+	}
+	cert, err := NewCertificate(info, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cert.Sign(key, EVP_SM3); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCAGenerate(t *testing.T) {
 	cakey, err := GenerateRSAKey(768)
 	if err != nil {
