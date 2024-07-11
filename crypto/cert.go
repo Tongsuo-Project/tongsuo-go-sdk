@@ -42,6 +42,7 @@ const (
 	EVP_SHA256    EVP_MD = iota
 	EVP_SHA384    EVP_MD = iota
 	EVP_SHA512    EVP_MD = iota
+	EVP_SM3       EVP_MD = iota
 )
 
 // X509_Version represents a version on an x509 certificate.
@@ -82,7 +83,7 @@ func NewCertWrapper(x unsafe.Pointer, ref ...interface{}) *Certificate {
 	}
 }
 
-// Allocate and return a new Name object.
+// NewName allocate and return a new Name object.
 func NewName() (*Name, error) {
 	n := C.X509_NAME_new()
 	if n == nil {
@@ -272,9 +273,10 @@ func (c *Certificate) SetPubKey(pubKey PublicKey) error {
 }
 
 // Sign a certificate using a private key and a digest name.
-// Accepted digest names are 'sha256', 'sha384', and 'sha512'.
+// Accepted digest names are 'sm3', 'sha256', 'sha384', and 'sha512'.
 func (c *Certificate) Sign(privKey PrivateKey, digest EVP_MD) error {
 	switch digest {
+	case EVP_SM3:
 	case EVP_SHA256:
 	case EVP_SHA384:
 	case EVP_SHA512:
@@ -293,7 +295,7 @@ func (c *Certificate) insecureSign(privKey PrivateKey, digest EVP_MD) error {
 	return nil
 }
 
-// Add an extension to a certificate.
+// AddExtension Add an extension to a certificate.
 // Extension constants are NID_* as found in openssl.
 func (c *Certificate) AddExtension(nid NID, value string) error {
 	issuer := c
@@ -313,7 +315,7 @@ func (c *Certificate) AddExtension(nid NID, value string) error {
 	return nil
 }
 
-// Wraps AddExtension using a map of NID to text extension.
+// AddExtensions Wraps AddExtension using a map of NID to text extension.
 // Will return without finishing if it encounters an error.
 func (c *Certificate) AddExtensions(extensions map[NID]string) error {
 	for nid, value := range extensions {
@@ -420,6 +422,8 @@ func getDigestFunction(digest EVP_MD) (md *C.EVP_MD) {
 		md = C.X_EVP_sha384()
 	case EVP_SHA512:
 		md = C.X_EVP_sha512()
+	case EVP_SM3:
+		md = C.X_EVP_sm3()
 	}
 	return md
 }
