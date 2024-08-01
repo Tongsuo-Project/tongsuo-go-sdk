@@ -174,12 +174,13 @@ func TestCAGenerateSM2(t *testing.T) {
 		NID_basic_constraints:        "critical,CA:TRUE",
 		NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
 		NID_subject_key_identifier:   "hash",
+		NID_netscape_cert_type:       "sslCA",
 		NID_authority_key_identifier: "keyid:always,issuer",
 	}
 	ca := createCertificate(caInfo, caKey, true, caExtensions)
-	if err := ca.SetVersion(X509_V3); err != nil {
-		t.Fatal(err)
-	}
+	//if err := ca.SetVersion(X509_V3); err != nil {
+	//	t.Fatal(err)
+	//}
 	signAndSaveCert(ca, caKey, "./../test/certs/sm2/chain-ca1.crt")
 
 	// 定义其他证书信息
@@ -206,16 +207,14 @@ func TestCAGenerateSM2(t *testing.T) {
 			CommonName:   "localhost",
 		}
 		extensions := map[NID]string{
-			NID_basic_constraints:        "critical,CA:FALSE",
-			NID_key_usage:                info.keyUsage,
-			NID_ext_key_usage:            info.extKeyUsage,
-			NID_subject_key_identifier:   "hash",
-			NID_authority_key_identifier: "keyid:always,issuer",
+			NID_basic_constraints: "critical,CA:FALSE",
+			NID_key_usage:         info.keyUsage,
+			NID_ext_key_usage:     info.extKeyUsage,
+			//NID_subject_key_identifier:   "hash",
+			//NID_authority_key_identifier: "keyid:always,issuer",
 		}
 		cert := createCertificate(certInfo, key, false, extensions)
-		if err := cert.SetVersion(X509_V3); err != nil {
-			t.Fatal(err)
-		}
+
 		check(cert.SetIssuer(ca))
 		signAndSaveCert(cert, caKey, fmt.Sprintf("./../test/certs/sm2/%s1.crt", info.name))
 	}
