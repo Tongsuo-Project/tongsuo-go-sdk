@@ -16,9 +16,7 @@ package crypto
 
 import (
 	"fmt"
-	"io"
 	"math/big"
-	"os"
 	"testing"
 	"time"
 )
@@ -127,24 +125,24 @@ func TestCAGenerate(t *testing.T) {
 }
 
 func TestCAGenerateSM2(t *testing.T) {
-	// 辅助函数：统一错误处理
+	// Helper function: unified error handling
 	check := func(err error) {
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// 辅助函数：生成密钥并保存
+	// Helper function: generate and save key
 	generateAndSaveKey := func(filename string) PrivateKey {
 		key, err := GenerateECKey(Sm2Curve)
 		check(err)
-		pem, err := key.MarshalPKCS8PrivateKeyPEM() // 使用 PKCS8 格式
+		pem, err := key.MarshalPKCS8PrivateKeyPEM()
 		check(err)
 		check(SavePEMToFile(pem, filename))
 		return key
 	}
 
-	// 辅助函数：创建证书
+	// Helper function: create certificate
 	createCertificate := func(info CertificateInfo, key PrivateKey, isCA bool, extensions map[NID]string) *Certificate {
 		cert, err := NewCertificate(&info, key)
 		check(err)
@@ -152,7 +150,7 @@ func TestCAGenerateSM2(t *testing.T) {
 		return cert
 	}
 
-	// 辅助函数：签名并保存证书
+	// Helper function: sign and save certificate
 	signAndSaveCert := func(cert *Certificate, caKey PrivateKey, filename string) {
 		check(cert.Sign(caKey, EVP_SM3))
 		certPem, err := cert.MarshalPEM()
@@ -160,8 +158,9 @@ func TestCAGenerateSM2(t *testing.T) {
 		check(SavePEMToFile(certPem, filename))
 	}
 
-	// 创建 CA 证书
-	caKey := generateAndSaveKey("./../test/certs/sm2/ca.key")
+	// Create CA certificate
+	caKey, err := GenerateECKey(Sm2Curve)
+	check(err)
 	caInfo := CertificateInfo{
 		big.NewInt(1),
 		0,
@@ -174,29 +173,26 @@ func TestCAGenerateSM2(t *testing.T) {
 		NID_basic_constraints:        "critical,CA:TRUE",
 		NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
 		NID_subject_key_identifier:   "hash",
+		NID_netscape_cert_type:       "sslCA",
 		NID_authority_key_identifier: "keyid:always,issuer",
 	}
 	ca := createCertificate(caInfo, caKey, true, caExtensions)
-	if err := ca.SetVersion(X509_V3); err != nil {
-		t.Fatal(err)
-	}
-	signAndSaveCert(ca, caKey, "./../test/certs/sm2/chain-ca1.crt")
+	signAndSaveCert(ca, caKey, "./../test/certs/sm2/chain-ca.crt")
 
-	// 定义其他证书信息
+	// Define additional certificate information
 	certInfos := []struct {
-		name        string
-		keyUsage    string
-		extKeyUsage string
+		name     string
+		keyUsage string
 	}{
-		{"server_enc", "keyAgreement, keyEncipherment, dataEncipherment", "serverAuth"},
-		{"server_sign", "nonRepudiation, digitalSignature", "emailProtection"},
-		{"client_sign", "nonRepudiation, digitalSignature", "emailProtection"},
-		{"client_enc", "keyAgreement, keyEncipherment, dataEncipherment", "serverAuth"},
+		{"server_enc", "keyAgreement, keyEncipherment, dataEncipherment"},
+		{"server_sign", "nonRepudiation, digitalSignature"},
+		{"client_sign", "nonRepudiation, digitalSignature"},
+		{"client_enc", "keyAgreement, keyEncipherment, dataEncipherment"},
 	}
 
-	// 创建其他证书
+	// Create additional certificates
 	for _, info := range certInfos {
-		key := generateAndSaveKey(fmt.Sprintf("./../test/certs/sm2/%s1.key", info.name))
+		key := generateAndSaveKey(fmt.Sprintf("./../test/certs/sm2/%s.key", info.name))
 		certInfo := CertificateInfo{
 			Serial:       big.NewInt(1),
 			Issued:       0,
@@ -206,50 +202,14 @@ func TestCAGenerateSM2(t *testing.T) {
 			CommonName:   "localhost",
 		}
 		extensions := map[NID]string{
-			NID_basic_constraints:        "critical,CA:FALSE",
-			NID_key_usage:                info.keyUsage,
-			NID_ext_key_usage:            info.extKeyUsage,
-			NID_subject_key_identifier:   "hash",
-			NID_authority_key_identifier: "keyid:always,issuer",
+			NID_basic_constraints: "critical,CA:FALSE",
+			NID_key_usage:         info.keyUsage,
 		}
 		cert := createCertificate(certInfo, key, false, extensions)
-		if err := cert.SetVersion(X509_V3); err != nil {
-			t.Fatal(err)
-		}
+
 		check(cert.SetIssuer(ca))
-		signAndSaveCert(cert, caKey, fmt.Sprintf("./../test/certs/sm2/%s1.crt", info.name))
+		signAndSaveCert(cert, caKey, fmt.Sprintf("./../test/certs/sm2/%s.crt", info.name))
 	}
-}
-
-func SavePEMToFile(pemBlock []byte, filename string) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	_, err = file.Write(pemBlock)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// LoadPEMFromFile loads a PEM file and returns the []byte format.
-func LoadPEMFromFile(filename string) ([]byte, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	pemBlock, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	return pemBlock, nil
 }
 
 func TestCertGetNameEntry(t *testing.T) {

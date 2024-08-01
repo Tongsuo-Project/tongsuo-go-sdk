@@ -32,15 +32,15 @@ func TestNTLS(t *testing.T) {
 		{
 			cipher:    ECCSM2Cipher,
 			runServer: internalServer,
-			caFile:    filepath.Join(testCertDir, "chain-ca1.crt"),
+			caFile:    filepath.Join(testCertDir, "chain-ca.crt"),
 		},
 		{
 			cipher:       ECDHESM2Cipher,
-			signCertFile: filepath.Join(testCertDir, "client_sign1.crt"),
-			signKeyFile:  filepath.Join(testCertDir, "client_sign1.key"),
-			encCertFile:  filepath.Join(testCertDir, "client_enc1.crt"),
-			encKeyFile:   filepath.Join(testCertDir, "client_enc1.key"),
-			caFile:       filepath.Join(testCertDir, "chain-ca1.crt"),
+			signCertFile: filepath.Join(testCertDir, "client_sign.crt"),
+			signKeyFile:  filepath.Join(testCertDir, "client_sign.key"),
+			encCertFile:  filepath.Join(testCertDir, "client_enc.crt"),
+			encKeyFile:   filepath.Join(testCertDir, "client_enc.key"),
+			caFile:       filepath.Join(testCertDir, "chain-ca.crt"),
 			runServer:    internalServer,
 		},
 	}
@@ -200,18 +200,18 @@ func newNTLSServer(t *testing.T, options ...func(sslctx *Ctx) error) (*echoServe
 		}
 	}
 
-	if err := ctx.LoadVerifyLocations(filepath.Join(testCertDir, "chain-ca1.crt"), ""); err != nil {
+	if err := ctx.LoadVerifyLocations(filepath.Join(testCertDir, "chain-ca.crt"), ""); err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	encCertPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_enc1.crt"))
+	encCertPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_enc.crt"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	signCertPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_sign1.crt"))
+	signCertPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_sign.crt"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
@@ -239,13 +239,13 @@ func newNTLSServer(t *testing.T, options ...func(sslctx *Ctx) error) (*echoServe
 		return nil, err
 	}
 
-	encKeyPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_enc1.key"))
+	encKeyPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_enc.key"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
 	}
 
-	signKeyPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_sign1.key"))
+	signKeyPEM, err := os.ReadFile(filepath.Join(testCertDir, "server_sign.key"))
 	if err != nil {
 		t.Error(err)
 		return nil, err
