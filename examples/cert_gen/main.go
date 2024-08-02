@@ -45,12 +45,11 @@ func main() {
 	caKey, err := crypto.GenerateECKey(crypto.Sm2Curve)
 	check(err)
 	caInfo := crypto.CertificateInfo{
-		big.NewInt(1),
-		0,
-		87600 * time.Hour, // 10 years
-		"US",
-		"Test CA",
-		"CA",
+		Serial:       big.NewInt(1),
+		Expires:      87600 * time.Hour, // 10 years
+		Country:      "US",
+		Organization: "Test CA",
+		CommonName:   "CA",
 	}
 	caExtensions := map[crypto.NID]string{
 		crypto.NID_basic_constraints:        "critical,CA:TRUE",
