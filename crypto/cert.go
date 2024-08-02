@@ -19,8 +19,10 @@ import "C"
 
 import (
 	"errors"
+	"io"
 	"io/ioutil"
 	"math/big"
+	"os"
 	"runtime"
 	"time"
 	"unsafe"
@@ -141,6 +143,9 @@ func NewCertificate(info *CertificateInfo, key PublicKey) (*Certificate, error) 
 		C.X509_free(c.x)
 	})
 
+	if err := c.SetVersion(X509_V3); err != nil {
+		return nil, err
+	}
 	name, err := c.GetSubjectName()
 	if err != nil {
 		return nil, err
@@ -426,4 +431,36 @@ func getDigestFunction(digest EVP_MD) (md *C.EVP_MD) {
 		md = C.X_EVP_sm3()
 	}
 	return md
+}
+
+// LoadPEMFromFile loads a PEM file and returns the []byte format.
+func LoadPEMFromFile(filename string) ([]byte, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	pemBlock, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	return pemBlock, nil
+}
+
+// SavePEMToFile saves a PEM block to a file.
+func SavePEMToFile(pemBlock []byte, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.Write(pemBlock)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
