@@ -19,8 +19,11 @@ import "C"
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"math/big"
+	"os"
 	"runtime"
 	"time"
 	"unsafe"
@@ -42,6 +45,7 @@ const (
 	EVP_SHA256    EVP_MD = iota
 	EVP_SHA384    EVP_MD = iota
 	EVP_SHA512    EVP_MD = iota
+	EVP_SM3       EVP_MD = iota
 )
 
 // X509_Version represents a version on an x509 certificate.
@@ -82,7 +86,7 @@ func NewCertWrapper(x unsafe.Pointer, ref ...interface{}) *Certificate {
 	}
 }
 
-// Allocate and return a new Name object.
+// NewName allocate and return a new Name object.
 func NewName() (*Name, error) {
 	n := C.X509_NAME_new()
 	if n == nil {
@@ -139,7 +143,9 @@ func NewCertificate(info *CertificateInfo, key PublicKey) (*Certificate, error) 
 	runtime.SetFinalizer(c, func(c *Certificate) {
 		C.X509_free(c.x)
 	})
-
+	if err := c.SetVersion(X509_V3); err != nil {
+		return nil, err
+	}
 	name, err := c.GetSubjectName()
 	if err != nil {
 		return nil, err
@@ -272,9 +278,10 @@ func (c *Certificate) SetPubKey(pubKey PublicKey) error {
 }
 
 // Sign a certificate using a private key and a digest name.
-// Accepted digest names are 'sha256', 'sha384', and 'sha512'.
+// Accepted digest names are 'sm3', 'sha256', 'sha384', and 'sha512'.
 func (c *Certificate) Sign(privKey PrivateKey, digest EVP_MD) error {
 	switch digest {
+	case EVP_SM3:
 	case EVP_SHA256:
 	case EVP_SHA384:
 	case EVP_SHA512:
@@ -293,27 +300,59 @@ func (c *Certificate) insecureSign(privKey PrivateKey, digest EVP_MD) error {
 	return nil
 }
 
-// Add an extension to a certificate.
+// AddExtension Add an extension to a certificate.
 // Extension constants are NID_* as found in openssl.
 func (c *Certificate) AddExtension(nid NID, value string) error {
+	if c.x == nil {
+		return errors.New("certificate is nil")
+	}
+
 	issuer := c
 	if c.Issuer != nil {
+		if c.Issuer.x == nil {
+			return errors.New("issuer certificate is nil")
+		}
 		issuer = c.Issuer
 	}
+
+	cValue := C.CString(value)
+	defer C.free(unsafe.Pointer(cValue))
+
 	var ctx C.X509V3_CTX
 	C.X509V3_set_ctx(&ctx, c.x, issuer.x, nil, nil, 0)
-	ex := C.X509V3_EXT_conf_nid(nil, &ctx, C.int(nid), C.CString(value))
+
+	ex := C.X509V3_EXT_conf_nid(nil, &ctx, C.int(nid), cValue)
 	if ex == nil {
-		return errors.New("failed to create x509v3 extension")
+		return fmt.Errorf("failed to create x509v3 extension: %s", getOpenSSLError())
 	}
 	defer C.X509_EXTENSION_free(ex)
+
 	if C.X509_add_ext(c.x, ex, -1) <= 0 {
-		return errors.New("failed to add x509v3 extension")
+		return fmt.Errorf("failed to add x509v3 extension: %s", getOpenSSLError())
+	}
+
+	return nil
+}
+
+// getOpenSSLError Get the last error from the OpenSSL error queue.
+func getOpenSSLError() string {
+	var errStrBuf [120]byte
+	C.ERR_error_string_n(C.ERR_get_error(), (*C.char)(unsafe.Pointer(&errStrBuf[0])), 120)
+	return string(errStrBuf[:])
+}
+
+// helper function to validate extension input
+func validateExtensionInput(nid NID, value string) error {
+	if nid <= 0 {
+		return errors.New("invalid NID")
+	}
+	if value == "" {
+		return errors.New("empty extension value")
 	}
 	return nil
 }
 
-// Wraps AddExtension using a map of NID to text extension.
+// AddExtensions Wraps AddExtension using a map of NID to text extension.
 // Will return without finishing if it encounters an error.
 func (c *Certificate) AddExtensions(extensions map[NID]string) error {
 	for nid, value := range extensions {
@@ -420,6 +459,40 @@ func getDigestFunction(digest EVP_MD) (md *C.EVP_MD) {
 		md = C.X_EVP_sha384()
 	case EVP_SHA512:
 		md = C.X_EVP_sha512()
+	case EVP_SM3:
+		md = C.X_EVP_sm3()
 	}
 	return md
+}
+
+// LoadPEMFromFile loads a PEM file and returns the []byte format.
+func LoadPEMFromFile(filename string) ([]byte, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	pemBlock, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	return pemBlock, nil
+}
+
+// SavePEMToFile saves a PEM block to a file.
+func SavePEMToFile(pemBlock []byte, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.Write(pemBlock)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

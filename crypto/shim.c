@@ -99,6 +99,10 @@ void* X_BIO_get_data(BIO* bio) {
 	return BIO_get_data(bio);
 }
 
+long X_BIO_get_mem_data(BIO *b, char **pp) {
+    return BIO_get_mem_data(b, pp);
+}
+
 EVP_MD_CTX* X_EVP_MD_CTX_new() {
 	return EVP_MD_CTX_new();
 }
