@@ -112,6 +112,10 @@ type PrivateKey interface {
 	// MarshalPKCS1PrivateKeyDER converts the private key to DER-encoded PKCS1
 	// format
 	MarshalPKCS1PrivateKeyDER() (der_block []byte, err error)
+
+	// MarshalPKCS8PrivateKeyPEM converts the private key to PEM-encoded PKCS8
+	// format
+	MarshalPKCS8PrivateKeyPEM() (pem_block []byte, err error)
 }
 
 type pKey struct {
@@ -237,6 +241,32 @@ func (key *pKey) VerifyPKCS1v15(method Method, data, sig []byte) error {
 
 		return nil
 	}
+}
+
+func (key *pKey) MarshalPKCS8PrivateKeyPEM() ([]byte, error) {
+	if key.key == nil {
+		return nil, errors.New("empty key")
+	}
+
+	bio := C.BIO_new(C.BIO_s_mem())
+	if bio == nil {
+		return nil, errors.New("failed to allocate memory")
+	}
+	defer C.BIO_free(bio)
+
+	if C.PEM_write_bio_PKCS8PrivateKey(bio, key.key, nil, nil, 0, nil, nil) != 1 {
+		return nil, errors.New("failed to write private key")
+	}
+
+	var ptr *C.char
+	length := C.X_BIO_get_mem_data(bio, &ptr)
+	if length <= 0 {
+		return nil, errors.New("failed to read bio data")
+	}
+
+	result := C.GoBytes(unsafe.Pointer(ptr), C.int(length))
+	runtime.KeepAlive(key)
+	return result, nil
 }
 
 func (key *pKey) Encrypt(data []byte) ([]byte, error) {
