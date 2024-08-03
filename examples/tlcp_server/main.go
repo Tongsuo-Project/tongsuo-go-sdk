@@ -152,11 +152,11 @@ func main() {
 	acceptAddr := ""
 
 	flag.StringVar(&acceptAddr, "accept", "127.0.0.1:443", "host:port")
-	flag.StringVar(&signCertFile, "sign_cert", "", "sign certificate file")
-	flag.StringVar(&signKeyFile, "sign_key", "", "sign private key file")
-	flag.StringVar(&encCertFile, "enc_cert", "", "encrypt certificate file")
-	flag.StringVar(&encKeyFile, "enc_key", "", "encrypt private key file")
-	flag.StringVar(&caFile, "CAfile", "", "CA certificate file")
+	flag.StringVar(&signCertFile, "sign_cert", "test/certs/sm2/server_sign.crt", "sign certificate file")
+	flag.StringVar(&signKeyFile, "sign_key", "test/certs/sm2/server_sign.key", "sign private key file")
+	flag.StringVar(&encCertFile, "enc_cert", "test/certs/sm2/server_enc.crt", "encrypt certificate file")
+	flag.StringVar(&encKeyFile, "enc_key", "test/certs/sm2/server_enc.key", "encrypt private key file")
+	flag.StringVar(&caFile, "CAfile", "test/certs/sm2/chain-ca.crt", "CA certificate file")
 
 	flag.Parse()
 
