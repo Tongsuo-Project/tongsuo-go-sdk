@@ -265,7 +265,6 @@ func (key *pKey) MarshalPKCS8PrivateKeyPEM() ([]byte, error) {
 	}
 
 	result := C.GoBytes(unsafe.Pointer(ptr), C.int(length))
-	runtime.KeepAlive(key)
 	return result, nil
 }
 
