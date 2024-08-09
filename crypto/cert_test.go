@@ -173,7 +173,6 @@ func TestCAGenerateSM2(t *testing.T) {
 		NID_basic_constraints:        "critical,CA:TRUE",
 		NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
 		NID_subject_key_identifier:   "hash",
-		NID_netscape_cert_type:       "sslCA",
 		NID_authority_key_identifier: "keyid:always,issuer",
 	}
 	ca := createCertificate(caInfo, caKey, true, caExtensions)
