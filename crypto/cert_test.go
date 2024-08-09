@@ -15,6 +15,7 @@
 package crypto
 
 import (
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -38,6 +39,28 @@ func TestCertGenerate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := cert.Sign(key, EVP_SHA256); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCertGenerateSM2(t *testing.T) {
+	key, err := GenerateECKey(Sm2Curve)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &CertificateInfo{
+		Serial:       big.NewInt(int64(1)),
+		Issued:       0,
+		Expires:      24 * time.Hour,
+		Country:      "US",
+		Organization: "Test",
+		CommonName:   "localhost",
+	}
+	cert, err := NewCertificate(info, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cert.Sign(key, EVP_SM3); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -98,6 +121,93 @@ func TestCAGenerate(t *testing.T) {
 	}
 	if err := cert.Sign(cakey, EVP_SHA256); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCAGenerateSM2(t *testing.T) {
+	// Helper function: unified error handling
+	check := func(err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Helper function: generate and save key
+	generateAndSaveKey := func(filename string) PrivateKey {
+		key, err := GenerateECKey(Sm2Curve)
+		check(err)
+		pem, err := key.MarshalPKCS8PrivateKeyPEM()
+		check(err)
+		check(SavePEMToFile(pem, filename))
+		return key
+	}
+
+	// Helper function: create certificate
+	createCertificate := func(info CertificateInfo, key PrivateKey, extensions map[NID]string) *Certificate {
+		cert, err := NewCertificate(&info, key)
+		check(err)
+		check(cert.AddExtensions(extensions))
+		return cert
+	}
+
+	// Helper function: sign and save certificate
+	signAndSaveCert := func(cert *Certificate, caKey PrivateKey, filename string) {
+		check(cert.Sign(caKey, EVP_SM3))
+		certPem, err := cert.MarshalPEM()
+		check(err)
+		check(SavePEMToFile(certPem, filename))
+	}
+
+	// Create CA certificate
+	caKey, err := GenerateECKey(Sm2Curve)
+	check(err)
+	caInfo := CertificateInfo{
+		big.NewInt(1),
+		0,
+		87600 * time.Hour, // 10 years
+		"US",
+		"Test CA",
+		"CA",
+	}
+	caExtensions := map[NID]string{
+		NID_basic_constraints:        "critical,CA:TRUE",
+		NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
+		NID_subject_key_identifier:   "hash",
+		NID_authority_key_identifier: "keyid:always,issuer",
+	}
+	ca := createCertificate(caInfo, caKey, caExtensions)
+	signAndSaveCert(ca, caKey, "./../test/certs/sm2/chain-ca.crt")
+
+	// Define additional certificate information
+	certInfos := []struct {
+		name     string
+		keyUsage string
+	}{
+		{"server_enc", "keyAgreement, keyEncipherment, dataEncipherment"},
+		{"server_sign", "nonRepudiation, digitalSignature"},
+		{"client_sign", "nonRepudiation, digitalSignature"},
+		{"client_enc", "keyAgreement, keyEncipherment, dataEncipherment"},
+	}
+
+	// Create additional certificates
+	for _, info := range certInfos {
+		key := generateAndSaveKey(fmt.Sprintf("./../test/certs/sm2/%s.key", info.name))
+		certInfo := CertificateInfo{
+			Serial:       big.NewInt(1),
+			Issued:       0,
+			Expires:      87600 * time.Hour, // 10 years
+			Country:      "US",
+			Organization: "Test",
+			CommonName:   "localhost",
+		}
+		extensions := map[NID]string{
+			NID_basic_constraints: "critical,CA:FALSE",
+			NID_key_usage:         info.keyUsage,
+		}
+		cert := createCertificate(certInfo, key, extensions)
+
+		check(cert.SetIssuer(ca))
+		signAndSaveCert(cert, caKey, fmt.Sprintf("./../test/certs/sm2/%s.crt", info.name))
 	}
 }
 
