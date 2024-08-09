@@ -143,7 +143,7 @@ func TestCAGenerateSM2(t *testing.T) {
 	}
 
 	// Helper function: create certificate
-	createCertificate := func(info CertificateInfo, key PrivateKey, isCA bool, extensions map[NID]string) *Certificate {
+	createCertificate := func(info CertificateInfo, key PrivateKey, extensions map[NID]string) *Certificate {
 		cert, err := NewCertificate(&info, key)
 		check(err)
 		check(cert.AddExtensions(extensions))
@@ -173,10 +173,9 @@ func TestCAGenerateSM2(t *testing.T) {
 		NID_basic_constraints:        "critical,CA:TRUE",
 		NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
 		NID_subject_key_identifier:   "hash",
-		NID_netscape_cert_type:       "sslCA",
 		NID_authority_key_identifier: "keyid:always,issuer",
 	}
-	ca := createCertificate(caInfo, caKey, true, caExtensions)
+	ca := createCertificate(caInfo, caKey, caExtensions)
 	signAndSaveCert(ca, caKey, "./../test/certs/sm2/chain-ca.crt")
 
 	// Define additional certificate information
@@ -205,7 +204,7 @@ func TestCAGenerateSM2(t *testing.T) {
 			NID_basic_constraints: "critical,CA:FALSE",
 			NID_key_usage:         info.keyUsage,
 		}
-		cert := createCertificate(certInfo, key, false, extensions)
+		cert := createCertificate(certInfo, key, extensions)
 
 		check(cert.SetIssuer(ca))
 		signAndSaveCert(cert, caKey, fmt.Sprintf("./../test/certs/sm2/%s.crt", info.name))

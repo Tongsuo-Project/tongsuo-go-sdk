@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const genPath = "./examples/cert_gen/"
+
 func main() {
 	// Helper function: unified error handling
 	check := func(err error) {
@@ -55,11 +57,10 @@ func main() {
 		crypto.NID_basic_constraints:        "critical,CA:TRUE",
 		crypto.NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
 		crypto.NID_subject_key_identifier:   "hash",
-		crypto.NID_netscape_cert_type:       "sslCA",
 		crypto.NID_authority_key_identifier: "keyid:always,issuer",
 	}
 	ca := createCertificate(caInfo, caKey, caExtensions)
-	signAndSaveCert(ca, caKey, "./../../test/certs/sm2/chain-ca.crt")
+	signAndSaveCert(ca, caKey, genPath+"chain-ca.crt")
 
 	// Define additional certificate information
 	certInfos := []struct {
@@ -74,7 +75,7 @@ func main() {
 
 	// Create additional certificates
 	for _, info := range certInfos {
-		key := generateAndSaveKey(fmt.Sprintf("./../../test/certs/sm2/%s.key", info.name))
+		key := generateAndSaveKey(fmt.Sprintf("%s%s.key", genPath, info.name))
 		certInfo := crypto.CertificateInfo{
 			Serial:       big.NewInt(1),
 			Issued:       0,
@@ -90,6 +91,6 @@ func main() {
 		cert := createCertificate(certInfo, key, extensions)
 
 		check(cert.SetIssuer(ca))
-		signAndSaveCert(cert, caKey, fmt.Sprintf("./../../test/certs/sm2/%s.crt", info.name))
+		signAndSaveCert(cert, caKey, fmt.Sprintf("%s%s.crt", genPath, info.name))
 	}
 }
