@@ -143,6 +143,9 @@ func NewCertificate(info *CertificateInfo, key PublicKey) (*Certificate, error) 
 	runtime.SetFinalizer(c, func(c *Certificate) {
 		C.X509_free(c.x)
 	})
+	if err := c.SetVersion(X509_V3); err != nil {
+		return nil, err
+	}
 	name, err := c.GetSubjectName()
 	if err != nil {
 		return nil, err
