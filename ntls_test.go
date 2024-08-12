@@ -30,42 +30,57 @@ func TestCAGenerateSM2AndNTLS(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Helper function: unified error handling
-	check := func(err error) {
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	// Helper function: generate and save key
 	generateAndSaveKey := func(filename string) crypto.PrivateKey {
 		key, err := crypto.GenerateECKey(crypto.Sm2Curve)
-		check(err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		pem, err := key.MarshalPKCS8PrivateKeyPEM()
-		check(err)
-		check(crypto.SavePEMToFile(pem, filename))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = crypto.SavePEMToFile(pem, filename)
+		if err != nil {
+			t.Fatal(err)
+		}
 		return key
 	}
 
 	// Helper function: create certificate
 	createCertificate := func(info crypto.CertificateInfo, key crypto.PrivateKey, extensions map[crypto.NID]string) *crypto.Certificate {
 		cert, err := crypto.NewCertificate(&info, key)
-		check(err)
-		check(cert.AddExtensions(extensions))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = cert.AddExtensions(extensions)
+		if err != nil {
+			t.Fatal(err)
+		}
 		return cert
 	}
 
 	// Helper function: sign and save certificate
 	signAndSaveCert := func(cert *crypto.Certificate, caKey crypto.PrivateKey, filename string) {
-		check(cert.Sign(caKey, crypto.EVP_SM3))
+		err := cert.Sign(caKey, crypto.EVP_SM3)
+		if err != nil {
+			t.Fatal(err)
+		}
 		certPem, err := cert.MarshalPEM()
-		check(err)
-		check(crypto.SavePEMToFile(certPem, filename))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = crypto.SavePEMToFile(certPem, filename)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Create CA certificate
 	caKey, err := crypto.GenerateECKey(crypto.Sm2Curve)
-	check(err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	caInfo := crypto.CertificateInfo{
 		Serial:       big.NewInt(1),
 		Expires:      87600 * time.Hour, // 10 years
@@ -113,7 +128,10 @@ func TestCAGenerateSM2AndNTLS(t *testing.T) {
 		}
 		cert := createCertificate(certInfo, key, extensions)
 
-		check(cert.SetIssuer(ca))
+		err = cert.SetIssuer(ca)
+		if err != nil {
+			t.Fatal(err)
+		}
 		certFile := filepath.Join(tmpDir, fmt.Sprintf("%s.crt", info.name))
 		signAndSaveCert(cert, caKey, certFile)
 	}

@@ -10,42 +10,57 @@ import (
 const genPath = "./examples/cert_gen/"
 
 func main() {
-	// Helper function: unified error handling
-	check := func(err error) {
-		if err != nil {
-			panic(err)
-		}
-	}
-
 	// Helper function: generate and save key
 	generateAndSaveKey := func(filename string) crypto.PrivateKey {
 		key, err := crypto.GenerateECKey(crypto.Sm2Curve)
-		check(err)
+		if err != nil {
+			panic(err)
+		}
 		pem, err := key.MarshalPKCS8PrivateKeyPEM()
-		check(err)
-		check(crypto.SavePEMToFile(pem, filename))
+		if err != nil {
+			panic(err)
+		}
+		err = crypto.SavePEMToFile(pem, filename)
+		if err != nil {
+			panic(err)
+		}
 		return key
 	}
 
 	// Helper function: create certificate
 	createCertificate := func(info crypto.CertificateInfo, key crypto.PrivateKey, extensions map[crypto.NID]string) *crypto.Certificate {
 		cert, err := crypto.NewCertificate(&info, key)
-		check(err)
-		check(cert.AddExtensions(extensions))
+		if err != nil {
+			panic(err)
+		}
+		err = cert.AddExtensions(extensions)
+		if err != nil {
+			panic(err)
+		}
 		return cert
 	}
 
 	// Helper function: sign and save certificate
 	signAndSaveCert := func(cert *crypto.Certificate, caKey crypto.PrivateKey, filename string) {
-		check(cert.Sign(caKey, crypto.EVP_SM3))
+		err := cert.Sign(caKey, crypto.EVP_SM3)
+		if err != nil {
+			panic(err)
+		}
 		certPem, err := cert.MarshalPEM()
-		check(err)
-		check(crypto.SavePEMToFile(certPem, filename))
+		if err != nil {
+			panic(err)
+		}
+		err = crypto.SavePEMToFile(certPem, filename)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	// Create CA certificate
 	caKey, err := crypto.GenerateECKey(crypto.Sm2Curve)
-	check(err)
+	if err != nil {
+		panic(err)
+	}
 	caInfo := crypto.CertificateInfo{
 		Serial:       big.NewInt(1),
 		Expires:      87600 * time.Hour, // 10 years
@@ -92,7 +107,10 @@ func main() {
 		}
 		cert := createCertificate(certInfo, key, extensions)
 
-		check(cert.SetIssuer(ca))
+		err = cert.SetIssuer(ca)
+		if err != nil {
+			panic(err)
+		}
 		certFile := filepath.Join(genPath, info.name+".crt")
 		signAndSaveCert(cert, caKey, certFile)
 	}

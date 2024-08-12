@@ -139,42 +139,57 @@ func TestCAGenerateSM2(t *testing.T) {
 		t.Logf("检查目录时发生错误: %v\n", err)
 	}
 
-	// Helper function: unified error handling
-	check := func(err error) {
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	// Helper function: generate and save key
 	generateAndSaveKey := func(filename string) PrivateKey {
 		key, err := GenerateECKey(Sm2Curve)
-		check(err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		pem, err := key.MarshalPKCS8PrivateKeyPEM()
-		check(err)
-		check(SavePEMToFile(pem, filename))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = SavePEMToFile(pem, filename)
+		if err != nil {
+			t.Fatal(err)
+		}
 		return key
 	}
 
 	// Helper function: create certificate
 	createCertificate := func(info CertificateInfo, key PrivateKey, extensions map[NID]string) *Certificate {
 		cert, err := NewCertificate(&info, key)
-		check(err)
-		check(cert.AddExtensions(extensions))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = cert.AddExtensions(extensions)
+		if err != nil {
+			t.Fatal(err)
+		}
 		return cert
 	}
 
 	// Helper function: sign and save certificate
 	signAndSaveCert := func(cert *Certificate, caKey PrivateKey, filename string) {
-		check(cert.Sign(caKey, EVP_SM3))
+		err := cert.Sign(caKey, EVP_SM3)
+		if err != nil {
+			t.Fatal(err)
+		}
 		certPem, err := cert.MarshalPEM()
-		check(err)
-		check(SavePEMToFile(certPem, filename))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = SavePEMToFile(certPem, filename)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Create CA certificate
 	caKey, err := GenerateECKey(Sm2Curve)
-	check(err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	caInfo := CertificateInfo{
 		big.NewInt(1),
 		0,
@@ -222,7 +237,10 @@ func TestCAGenerateSM2(t *testing.T) {
 		}
 		cert := createCertificate(certInfo, key, extensions)
 
-		check(cert.SetIssuer(ca))
+		err = cert.SetIssuer(ca)
+		if err != nil {
+			t.Fatal(err)
+		}
 		certFile := filepath.Join(dirName, info.name+".crt")
 		signAndSaveCert(cert, caKey, certFile)
 	}
