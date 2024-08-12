@@ -47,19 +47,6 @@ func TestCAGenerateSM2AndNTLS(t *testing.T) {
 		return key
 	}
 
-	// Helper function: create certificate
-	createCertificate := func(info crypto.CertificateInfo, key crypto.PrivateKey, extensions map[crypto.NID]string) *crypto.Certificate {
-		cert, err := crypto.NewCertificate(&info, key)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = cert.AddExtensions(extensions)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return cert
-	}
-
 	// Helper function: sign and save certificate
 	signAndSaveCert := func(cert *crypto.Certificate, caKey crypto.PrivateKey, filename string) {
 		err := cert.Sign(caKey, crypto.EVP_SM3)
@@ -94,7 +81,14 @@ func TestCAGenerateSM2AndNTLS(t *testing.T) {
 		crypto.NID_subject_key_identifier:   "hash",
 		crypto.NID_authority_key_identifier: "keyid:always,issuer",
 	}
-	ca := createCertificate(caInfo, caKey, caExtensions)
+	ca, err := crypto.NewCertificate(&caInfo, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = ca.AddExtensions(caExtensions)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// 生成CA证书,并保存到临时目录
 	caCertFile := filepath.Join(tmpDir, "chain-ca.crt")
 	signAndSaveCert(ca, caKey, caCertFile)
@@ -126,8 +120,14 @@ func TestCAGenerateSM2AndNTLS(t *testing.T) {
 			crypto.NID_basic_constraints: "critical,CA:FALSE",
 			crypto.NID_key_usage:         info.keyUsage,
 		}
-		cert := createCertificate(certInfo, key, extensions)
-
+		cert, err := crypto.NewCertificate(&certInfo, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = cert.AddExtensions(extensions)
+		if err != nil {
+			t.Fatal(err)
+		}
 		err = cert.SetIssuer(ca)
 		if err != nil {
 			t.Fatal(err)

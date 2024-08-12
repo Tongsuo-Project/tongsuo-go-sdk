@@ -156,19 +156,6 @@ func TestCAGenerateSM2(t *testing.T) {
 		return key
 	}
 
-	// Helper function: create certificate
-	createCertificate := func(info CertificateInfo, key PrivateKey, extensions map[NID]string) *Certificate {
-		cert, err := NewCertificate(&info, key)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = cert.AddExtensions(extensions)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return cert
-	}
-
 	// Helper function: sign and save certificate
 	signAndSaveCert := func(cert *Certificate, caKey PrivateKey, filename string) {
 		err := cert.Sign(caKey, EVP_SM3)
@@ -204,7 +191,14 @@ func TestCAGenerateSM2(t *testing.T) {
 		NID_subject_key_identifier:   "hash",
 		NID_authority_key_identifier: "keyid:always,issuer",
 	}
-	ca := createCertificate(caInfo, caKey, caExtensions)
+	ca, err := NewCertificate(&caInfo, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = ca.AddExtensions(caExtensions)
+	if err != nil {
+		t.Fatal(err)
+	}
 	caFile := filepath.Join(dirName, "chain-ca.crt")
 	signAndSaveCert(ca, caKey, caFile)
 
@@ -235,8 +229,14 @@ func TestCAGenerateSM2(t *testing.T) {
 			NID_basic_constraints: "critical,CA:FALSE",
 			NID_key_usage:         info.keyUsage,
 		}
-		cert := createCertificate(certInfo, key, extensions)
-
+		cert, err := NewCertificate(&certInfo, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = cert.AddExtensions(extensions)
+		if err != nil {
+			t.Fatal(err)
+		}
 		err = cert.SetIssuer(ca)
 		if err != nil {
 			t.Fatal(err)
