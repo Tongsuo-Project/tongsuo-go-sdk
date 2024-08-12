@@ -187,7 +187,7 @@ func TestCAGenerateSM2(t *testing.T) {
 		NID_basic_constraints:        "critical,CA:TRUE",
 		NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
 		NID_subject_key_identifier:   "hash",
-		NID_authority_key_identifier: "keyid:always,issuer:always",
+		NID_authority_key_identifier: "keyid:always,issuer",
 	}
 	ca := createCertificate(caInfo, caKey, caExtensions)
 	caFile := filepath.Join(dirName, "chain-ca.crt")

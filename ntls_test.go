@@ -77,7 +77,7 @@ func TestCAGenerateSM2AndNTLS(t *testing.T) {
 		crypto.NID_basic_constraints:        "critical,CA:TRUE",
 		crypto.NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
 		crypto.NID_subject_key_identifier:   "hash",
-		crypto.NID_authority_key_identifier: "keyid:always,issuer:always",
+		crypto.NID_authority_key_identifier: "keyid:always,issuer",
 	}
 	ca := createCertificate(caInfo, caKey, caExtensions)
 	// 生成CA证书,并保存到临时目录
