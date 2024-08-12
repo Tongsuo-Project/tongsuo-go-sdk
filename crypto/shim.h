@@ -43,6 +43,7 @@ extern int X_BIO_read(BIO *b, void *buf, int len);
 extern int X_BIO_write(BIO *b, const void *buf, int len);
 extern BIO *X_BIO_new_write_bio();
 extern BIO *X_BIO_new_read_bio();
+extern long X_BIO_get_mem_data(BIO *b, char **pp);
 
 extern int X_BN_num_bytes(const BIGNUM *a);
 
