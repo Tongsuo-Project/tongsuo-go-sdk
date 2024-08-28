@@ -48,6 +48,13 @@ const (
 	EVP_SM3       EVP_MD = iota
 )
 
+type GMDoubleCertKey struct {
+	SignCertFile string
+	SignKeyFile  string
+	EncCertFile  string
+	EncKeyFile   string
+}
+
 // X509_Version represents a version on an x509 certificate.
 type X509_Version int
 
