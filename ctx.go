@@ -81,7 +81,7 @@ const (
 	TLSv1_2 SSLVersion = 0x05
 	NTLS    SSLVersion = 0x06
 
-	// Make sure to disable SSLv2 and SSLv3 if you use this. SSLv3 is vulnerable
+	// AnyVersion Make sure to disable SSLv2 and SSLv3 if you use this. SSLv3 is vulnerable
 	// to the "POODLE" attack, and SSLv2 is what, just don't even.
 	AnyVersion SSLVersion = 0x01
 )
@@ -300,7 +300,7 @@ type CertificateStore struct {
 	certs []*crypto.Certificate
 }
 
-// Allocate a new, empty CertificateStore
+// NewCertificateStore Allocate a new, empty CertificateStore
 func NewCertificateStore() (*CertificateStore, error) {
 	s := C.X509_STORE_new()
 	if s == nil {
@@ -313,7 +313,7 @@ func NewCertificateStore() (*CertificateStore, error) {
 	return store, nil
 }
 
-// Parse a chained PEM file, loading all certificates into the Store.
+// LoadCertificatesFromPEM Parse a chained PEM file, loading all certificates into the Store.
 func (s *CertificateStore) LoadCertificatesFromPEM(data []byte) error {
 	pems := SplitPEM(data)
 	for _, pem := range pems {
@@ -385,7 +385,7 @@ func (self *CertificateStoreCtx) Depth() int {
 	return int(C.X509_STORE_CTX_get_error_depth(self.ctx))
 }
 
-// the certicate returned is only valid for the lifetime of the underlying
+// GetCurrentCert the certicate returned is only valid for the lifetime of the underlying
 // X509_STORE_CTX
 func (self *CertificateStoreCtx) GetCurrentCert() *crypto.Certificate {
 	x509 := C.X509_STORE_CTX_get_current_cert(self.ctx)
@@ -628,19 +628,19 @@ func (c *Ctx) SetTimeout(t time.Duration) time.Duration {
 	return time.Duration(prev) * time.Second
 }
 
-// Get session cache timeout.
+// GetTimeout Get session cache timeout.
 // See https://www.openssl.org/docs/ssl/SSL_CTX_set_timeout.html
 func (c *Ctx) GetTimeout() time.Duration {
 	return time.Duration(C.X_SSL_CTX_get_timeout(c.ctx)) * time.Second
 }
 
-// Set session cache size. Returns previously set value.
+// SessSetCacheSize Set session cache size. Returns previously set value.
 // https://www.openssl.org/docs/ssl/SSL_CTX_sess_set_cache_size.html
 func (c *Ctx) SessSetCacheSize(t int) int {
 	return int(C.X_SSL_CTX_sess_set_cache_size(c.ctx, C.long(t)))
 }
 
-// Get session cache size.
+// SessGetCacheSize Get session cache size.
 // https://www.openssl.org/docs/ssl/SSL_CTX_sess_set_cache_size.html
 func (c *Ctx) SessGetCacheSize() int {
 	return int(C.X_SSL_CTX_sess_get_cache_size(c.ctx))

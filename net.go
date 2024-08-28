@@ -77,8 +77,8 @@ const (
 // some certs to the certificate store of the client context you're using.
 // This library is not nice enough to use the system certificate store by
 // default for you yet.
-func Dial(network, addr string, ctx *Ctx, flags DialFlags) (*Conn, error) {
-	return DialSession(network, addr, ctx, flags, nil)
+func Dial(network, addr string, ctx *Ctx, flags DialFlags, host string) (*Conn, error) {
+	return DialSession(network, addr, ctx, flags, nil, host)
 }
 
 // DialSession will connect to network/address and then wrap the corresponding
@@ -95,9 +95,12 @@ func Dial(network, addr string, ctx *Ctx, flags DialFlags) (*Conn, error) {
 // If session is not nil it will be used to resume the tls state. The session
 // can be retrieved from the GetSession method on the Conn.
 func DialSession(network, addr string, ctx *Ctx, flags DialFlags,
-	session []byte) (*Conn, error) {
+	session []byte, host string) (*Conn, error) {
 
-	host, _, err := net.SplitHostPort(addr)
+	var err error
+	if host == "" {
+		host, _, err = net.SplitHostPort(addr)
+	}
 	if err != nil {
 		return nil, err
 	}
