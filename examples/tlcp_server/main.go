@@ -10,16 +10,50 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
+	ts "github.com/tongsuo-project/tongsuo-go-sdk"
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"log"
 	"net"
 	"os"
-
-	ts "github.com/tongsuo-project/tongsuo-go-sdk"
-	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
+	"path/filepath"
 )
 
+func ReadCertificateFiles(dirPath string) (map[string]crypto.GMDoubleCertKey, error) {
+	certFiles := make(map[string]crypto.GMDoubleCertKey)
+
+	files, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			domain := file.Name()
+			encCertFile := filepath.Join(dirPath, domain, "server_enc.crt")
+			encKeyFile := filepath.Join(dirPath, domain, "server_enc.key")
+			signCertFile := filepath.Join(dirPath, domain, "server_sign.crt")
+			signKeyFile := filepath.Join(dirPath, domain, "server_sign.key")
+
+			certFiles[domain] = crypto.GMDoubleCertKey{
+				EncCertFile:  encCertFile,
+				SignCertFile: signCertFile,
+				EncKeyFile:   encKeyFile,
+				SignKeyFile:  signKeyFile,
+			}
+		}
+	}
+
+	return certFiles, nil
+}
+
 func handleConn(conn net.Conn) {
-	defer conn.Close()
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+
+		}
+	}(conn)
 
 	// Read incoming data into buffer
 	req, err := bufio.NewReader(conn).ReadString('\n')
@@ -54,7 +88,8 @@ func handleConn(conn net.Conn) {
 	log.Println("Close connection")
 }
 
-func newNTLSServer(acceptAddr string, signCertFile string, signKeyFile string, encCertFile string, encKeyFile string, cafile string) (net.Listener, error) {
+func newNTLSServerWithSNI(acceptAddr string, certKeyPairs map[string]crypto.GMDoubleCertKey, cafile string) (net.Listener, error) {
+
 	ctx, err := ts.NewCtxWithVersion(ts.NTLS)
 	if err != nil {
 		log.Println(err)
@@ -66,74 +101,32 @@ func newNTLSServer(acceptAddr string, signCertFile string, signKeyFile string, e
 		return nil, err
 	}
 
-	encCertPEM, err := os.ReadFile(encCertFile)
-	if err != nil {
+	// Set SNI callback
+	ctx.SetTLSExtServernameCallback(func(ssl *ts.SSL) ts.SSLTLSExtErr {
+		serverName := ssl.GetServername()
+		log.Printf("SNI: Client requested hostname: %s\n", serverName)
+
+		if certKeyPair, ok := certKeyPairs[serverName]; ok {
+			if err := loadCertAndKeyForSSL(ssl, certKeyPair); err != nil {
+				log.Printf("Error loading certificate for %s: %v\n", serverName, err)
+				return ts.SSLTLSEXTErrAlertFatal
+			}
+		} else {
+			log.Printf("No certificate found for %s, using default\n", serverName)
+			return ts.SSLTLSEXTErrNoAck
+		}
+
+		return ts.SSLTLSExtErrOK
+	})
+
+	// Load a default certificate and key
+	defaultCertKeyPair := certKeyPairs["default"]
+	if err := loadCertAndKey(ctx, defaultCertKeyPair); err != nil {
 		log.Println(err)
 		return nil, err
 	}
 
-	signCertPEM, err := os.ReadFile(signCertFile)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	if err := ctx.UseEncryptCertificate(encCert); err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	if err := ctx.UseSignCertificate(signCert); err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	encKeyPEM, err := os.ReadFile(encKeyFile)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	signKeyPEM, err := os.ReadFile(signKeyFile)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	if err := ctx.UseEncryptPrivateKey(encKey); err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	if err := ctx.UseSignPrivateKey(signKey); err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
+	// Listen for incoming connections
 	lis, err := ts.Listen("tcp", acceptAddr, ctx)
 	if err != nil {
 		log.Println(err)
@@ -141,6 +134,144 @@ func newNTLSServer(acceptAddr string, signCertFile string, signKeyFile string, e
 	}
 
 	return lis, nil
+}
+
+// Load certificate and key for SSL
+func loadCertAndKeyForSSL(ssl *ts.SSL, certKeyPair crypto.GMDoubleCertKey) error {
+	ctx, err := ts.NewCtx()
+	if err != nil {
+		return err
+	}
+
+	encCertPEM, err := crypto.LoadPEMFromFile(certKeyPair.EncCertFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = ctx.UseEncryptCertificate(encCert)
+	if err != nil {
+		return err
+	}
+
+	signCertPEM, err := crypto.LoadPEMFromFile(certKeyPair.SignCertFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = ctx.UseSignCertificate(signCert)
+	if err != nil {
+		return err
+	}
+
+	encKeyPEM, err := os.ReadFile(certKeyPair.EncKeyFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = ctx.UseEncryptPrivateKey(encKey)
+	if err != nil {
+		return err
+	}
+
+	signKeyPEM, err := os.ReadFile(certKeyPair.SignKeyFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = ctx.UseSignPrivateKey(signKey)
+	if err != nil {
+		return err
+	}
+
+	ssl.SetSSLCtx(ctx)
+
+	return nil
+}
+
+// Load certificate and key for context
+func loadCertAndKey(ctx *ts.Ctx, pair crypto.GMDoubleCertKey) (err error) {
+	encCertPEM, err := crypto.LoadPEMFromFile(pair.EncCertFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = ctx.UseEncryptCertificate(encCert)
+	if err != nil {
+		return err
+	}
+
+	signCertPEM, err := crypto.LoadPEMFromFile(pair.SignCertFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = ctx.UseSignCertificate(signCert)
+	if err != nil {
+		return err
+	}
+
+	encKeyPEM, err := os.ReadFile(pair.EncKeyFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = ctx.UseEncryptPrivateKey(encKey)
+	if err != nil {
+		return err
+	}
+
+	signKeyPEM, err := os.ReadFile(pair.SignKeyFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = ctx.UseSignPrivateKey(signKey)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }
 
 func main() {
@@ -151,7 +282,7 @@ func main() {
 	caFile := ""
 	acceptAddr := ""
 
-	flag.StringVar(&acceptAddr, "accept", "127.0.0.1:443", "host:port")
+	flag.StringVar(&acceptAddr, "accept", "127.0.0.1:4438", "host:port")
 	flag.StringVar(&signCertFile, "sign_cert", "test/certs/sm2/server_sign.crt", "sign certificate file")
 	flag.StringVar(&signKeyFile, "sign_key", "test/certs/sm2/server_sign.key", "sign private key file")
 	flag.StringVar(&encCertFile, "enc_cert", "test/certs/sm2/server_enc.crt", "encrypt certificate file")
@@ -160,12 +291,22 @@ func main() {
 
 	flag.Parse()
 
-	server, err := newNTLSServer(acceptAddr, signCertFile, signKeyFile, encCertFile, encKeyFile, caFile)
+	certFiles, err := ReadCertificateFiles("test/sni_certs")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 
+	server, err := newNTLSServerWithSNI(acceptAddr, certFiles, caFile)
 	if err != nil {
 		return
 	}
-	defer server.Close()
+	defer func(server net.Listener) {
+		err := server.Close()
+		if err != nil {
+			log.Println("failed close: ", err)
+		}
+	}(server)
 
 	for {
 		conn, err := server.Accept()
