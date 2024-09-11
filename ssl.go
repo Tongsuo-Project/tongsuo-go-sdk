@@ -27,8 +27,13 @@ type SSLTLSExtErr int
 const (
 	SSLTLSExtErrOK           SSLTLSExtErr = C.SSL_TLSEXT_ERR_OK
 	SSLTLSExtErrAlertWarning SSLTLSExtErr = C.SSL_TLSEXT_ERR_ALERT_WARNING
-	SSLTLSEXTErrAlertFatal   SSLTLSExtErr = C.SSL_TLSEXT_ERR_ALERT_FATAL
-	SSLTLSEXTErrNoAck        SSLTLSExtErr = C.SSL_TLSEXT_ERR_NOACK
+	SSLTLSExtErrAlertFatal   SSLTLSExtErr = C.SSL_TLSEXT_ERR_ALERT_FATAL
+	SSLTLSExtErrNoAck        SSLTLSExtErr = C.SSL_TLSEXT_ERR_NOACK
+)
+
+const (
+	OPENSSL_NPN_NEGOTIATED C.int = C.OPENSSL_NPN_NEGOTIATED
+	OPENSSL_NPN_NO_OVERLAP C.int = C.OPENSSL_NPN_NO_OVERLAP
 )
 
 var (
@@ -167,4 +172,23 @@ func sni_cb_thunk(p unsafe.Pointer, con *C.SSL, ad unsafe.Pointer, arg unsafe.Po
 
 	// Note: this is ctx.sni_cb, not C.sni_cb
 	return C.int(sni_cb(s))
+}
+
+//export alpn_cb_thunk
+func alpn_cb_thunk(p unsafe.Pointer, con *C.SSL, out unsafe.Pointer, outlen unsafe.Pointer, in unsafe.Pointer, inlen uint, arg unsafe.Pointer) C.int {
+	defer func() {
+		if err := recover(); err != nil {
+			//logger.Critf("openssl: verify callback alpn panic'd: %v", err)
+			os.Exit(1)
+		}
+	}()
+
+	alpn_cb := (*Ctx)(p).alpn_cb
+
+	s := &SSL{ssl: con}
+	// This attaches a pointer to our SSL struct into the ALPN callback.
+	C.SSL_set_ex_data(s.ssl, get_ssl_idx(), unsafe.Pointer(s.ssl))
+
+	// Ensure the out parameter is treated as a pointer to const unsigned char
+	return C.int(alpn_cb(s, out, outlen, in, inlen, arg))
 }

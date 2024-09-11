@@ -3,6 +3,7 @@ package tongsuogo
 import (
 	"bufio"
 	"fmt"
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"log"
 	"math/big"
 	"net"
@@ -10,8 +11,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 const (
@@ -591,6 +590,16 @@ func (s *echoServer) Run() error {
 	}
 }
 
+func (s *echoServer) RunForALPN() error {
+	for {
+		conn, err := s.Listener.Accept()
+		if err != nil {
+			return err
+		}
+		go handleConnForALPN(conn)
+	}
+}
+
 func handleConn(conn net.Conn) {
 	defer conn.Close()
 
@@ -606,6 +615,32 @@ func handleConn(conn net.Conn) {
 		log.Printf("Unable to send response: %v", err)
 		return
 	}
+}
+
+func handleConnForALPN(conn net.Conn) {
+	defer conn.Close()
+
+	// Read incoming data into buffer
+	req, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		log.Printf("Error reading incoming data: %v", err)
+		return
+	}
+
+	// Send a response back to the client
+	if _, err = conn.Write([]byte(req + "\n")); err != nil {
+		log.Printf("Unable to send response: %v", err)
+		return
+	}
+
+	ntls := conn.(*Conn)
+	protocol, err := ntls.GetALPNNegotiated()
+	if err != nil {
+		log.Printf("Error getting negotiated protocol: %v", err)
+		return
+	}
+
+	log.Printf("Negotiated protocol: %s\n", protocol)
 }
 
 func TestSNI(t *testing.T) {
@@ -629,6 +664,13 @@ func TestSNI(t *testing.T) {
 	go server.Run()
 
 	// Run Client
+	signCertFile := "test/certs/sm2/client_sign.crt"
+	signKeyFile := "test/certs/sm2/client_sign.key"
+	encCertFile := "test/certs/sm2/client_enc.crt"
+	encKeyFile := "test/certs/sm2/client_enc.key"
+	caFile := "test/certs/sm2/chain-ca.crt"
+	connAddr := "127.0.0.1:4433"
+
 	ctx, err := NewCtxWithVersion(NTLS)
 	if err != nil {
 		t.Error(err)
@@ -639,13 +681,6 @@ func TestSNI(t *testing.T) {
 		t.Error(err)
 		return
 	}
-
-	signCertFile := "test/certs/sm2/client_sign.crt"
-	signKeyFile := "test/certs/sm2/client_sign.key"
-	encCertFile := "test/certs/sm2/client_enc.crt"
-	encKeyFile := "test/certs/sm2/client_enc.key"
-	caFile := "test/certs/sm2/chain-ca.crt"
-	connAddr := "127.0.0.1:4433"
 
 	signCertPEM, err2 := os.ReadFile(signCertFile)
 	if err2 != nil {
@@ -777,11 +812,11 @@ func newNTLSServerWithSNI(t *testing.T, testDir string, certKeyPairs map[string]
 			if certKeyPair, ok := certKeyPairs[serverName]; ok {
 				if err := loadCertAndKeyForSSL(ssl, certKeyPair); err != nil {
 					log.Printf("Error loading certificate for %s: %v\n", serverName, err)
-					return SSLTLSEXTErrAlertFatal
+					return SSLTLSExtErrAlertFatal
 				}
 			} else {
 				log.Printf("No certificate found for %s, using default\n", serverName)
-				return SSLTLSEXTErrNoAck
+				return SSLTLSExtErrNoAck
 			}
 
 			return SSLTLSExtErrOK
@@ -964,4 +999,253 @@ func ReadCertificateFiles(dirPath string) (map[string]crypto.GMDoubleCertKey, er
 	}
 
 	return certFiles, nil
+}
+
+func TestALPN(t *testing.T) {
+	// Run server
+	server, err := newNTLSServerWithALPN(t, testCertDir, func(sslctx *Ctx) error {
+		return sslctx.SetCipherList("ECC-SM2-SM4-CBC-SM3")
+	})
+
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	defer server.Close()
+	go server.RunForALPN()
+
+	// Run Client
+	signCertFile := "test/certs/sm2/client_sign.crt"
+	signKeyFile := "test/certs/sm2/client_sign.key"
+	encCertFile := "test/certs/sm2/client_enc.crt"
+	encKeyFile := "test/certs/sm2/client_enc.key"
+	caFile := "test/certs/sm2/chain-ca.crt"
+	connAddr := "127.0.0.1:4433"
+	alpnProtocols := []string{"h3"}
+
+	ctx, err := NewCtxWithVersion(NTLS)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if err := ctx.SetCipherList("ECC-SM2-SM4-CBC-SM3"); err != nil {
+		t.Error(err)
+		return
+	}
+
+	// Set the ALPN protocols for the context
+	if err := ctx.SetClientALPNProtos(alpnProtocols); err != nil {
+		t.Error(err)
+		return
+	}
+
+	signCertPEM, err2 := os.ReadFile(signCertFile)
+	if err2 != nil {
+		t.Error(err2)
+		return
+	}
+	signCert, err2 := crypto.LoadCertificateFromPEM(signCertPEM)
+	if err2 != nil {
+		t.Error(err2)
+		return
+	}
+	if err := ctx.UseSignCertificate(signCert); err != nil {
+		t.Error(err)
+		return
+	}
+
+	signKeyPEM, err3 := os.ReadFile(signKeyFile)
+	if err3 != nil {
+		t.Error(err3)
+		return
+	}
+	signKey, err3 := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
+	if err3 != nil {
+		t.Error(err3)
+		return
+	}
+	if err := ctx.UseSignPrivateKey(signKey); err != nil {
+		t.Error(err)
+		return
+	}
+
+	encCertPEM, err4 := os.ReadFile(encCertFile)
+	if err4 != nil {
+		t.Error(err4)
+		return
+	}
+	encCert, err4 := crypto.LoadCertificateFromPEM(encCertPEM)
+	if err4 != nil {
+		t.Error(err4)
+		return
+	}
+	if err := ctx.UseEncryptCertificate(encCert); err != nil {
+		t.Error(err)
+		return
+	}
+
+	encKeyPEM, err5 := os.ReadFile(encKeyFile)
+	if err5 != nil {
+		t.Error(err5)
+		return
+	}
+	encKey, err5 := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
+	if err5 != nil {
+		t.Error(err5)
+		return
+	}
+	if err := ctx.UseEncryptPrivateKey(encKey); err != nil {
+		t.Error(err)
+		return
+	}
+
+	if err := ctx.LoadVerifyLocations(caFile, ""); err != nil {
+		t.Error(err)
+		return
+	}
+
+	// Connect to the server
+	conn, err := Dial("tcp", connAddr, ctx, InsecureSkipHostVerification, "")
+	if err != nil {
+		t.Log(err)
+		return
+	}
+	defer conn.Close()
+
+	// Attempt to retrieve the negotiated ALPN (Application-Layer Protocol Negotiation) protocol
+	negotiatedProto, err := conn.GetALPNNegotiated()
+	if err != nil {
+		// If there is an error, log it and terminate the test
+		t.Log("Failed to get negotiated ALPN protocol:", err)
+		return
+	} else {
+		t.Log("ALPN negotiated successfully", negotiatedProto)
+	}
+
+	cipher, err := conn.CurrentCipher()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	t.Log("current cipher", cipher)
+
+	request := "hello tongsuo\n"
+	if _, err := conn.Write([]byte(request)); err != nil {
+		t.Error(err)
+		return
+	}
+
+	resp, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if resp != request {
+		t.Error("response data is not expected: ", resp)
+		return
+	}
+}
+
+func newNTLSServerWithALPN(t *testing.T, testDir string, options ...func(sslctx *Ctx) error) (*echoServer, error) {
+	ctx, err := NewCtxWithVersion(NTLS)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	for _, f := range options {
+		if err := f(ctx); err != nil {
+			t.Error(err)
+			return nil, err
+		}
+	}
+
+	if err := ctx.LoadVerifyLocations(filepath.Join(testDir, "chain-ca.crt"), ""); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	// Set ALPN
+	supportedProtos := []string{"h2", "http/1.1"}
+	ctx.SetServerALPNProtos(supportedProtos)
+
+	encCertPEM, err := os.ReadFile(filepath.Join(testDir, "server_enc.crt"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	signCertPEM, err := os.ReadFile(filepath.Join(testDir, "server_sign.crt"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseEncryptCertificate(encCert); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseSignCertificate(signCert); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	encKeyPEM, err := os.ReadFile(filepath.Join(testDir, "server_enc.key"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	signKeyPEM, err := os.ReadFile(filepath.Join(testDir, "server_sign.key"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseEncryptPrivateKey(encKey); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseSignPrivateKey(signKey); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	lis, err := Listen("tcp", "127.0.0.1:4433", ctx)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	return &echoServer{lis}, nil
 }
