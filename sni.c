@@ -21,3 +21,9 @@ int sni_cb(SSL *con, int *ad, void *arg) {
 	void* p = SSL_CTX_get_ex_data(ssl_ctx, get_ssl_ctx_idx());
 	return sni_cb_thunk(p, con, ad, arg);
 }
+
+int alpn_cb(SSL *ssl_conn, const unsigned char **out, unsigned char *outlen, const unsigned char *in, unsigned int inlen, void *arg) {
+	SSL_CTX* ssl_ctx = SSL_get_SSL_CTX(ssl_conn);
+	void* p = SSL_CTX_get_ex_data(ssl_ctx, get_ssl_ctx_idx());
+	return alpn_cb_thunk(p, ssl_conn, (unsigned char **)out, outlen, (unsigned char *)in, inlen, arg);
+}

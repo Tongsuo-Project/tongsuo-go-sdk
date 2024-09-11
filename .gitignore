@@ -16,3 +16,8 @@
 
 # Dependency directories (remove the comment below to include it)
 tongsuo/
+
+crypto/test-runs/
+examples/cert_gen/
+.vscode/
+.idea/
