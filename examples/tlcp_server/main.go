@@ -17,6 +17,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func ReadCertificateFiles(dirPath string) (map[string]crypto.GMDoubleCertKey, error) {
@@ -88,7 +89,7 @@ func handleConn(conn net.Conn) {
 	log.Println("Close connection")
 }
 
-func newNTLSServerWithSNI(acceptAddr string, certKeyPairs map[string]crypto.GMDoubleCertKey, cafile string) (net.Listener, error) {
+func newNTLSServer(acceptAddr string, certKeyPairs map[string]crypto.GMDoubleCertKey, cafile string, alpnProtocols []string) (net.Listener, error) {
 
 	ctx, err := ts.NewCtxWithVersion(ts.NTLS)
 	if err != nil {
@@ -101,6 +102,9 @@ func newNTLSServerWithSNI(acceptAddr string, certKeyPairs map[string]crypto.GMDo
 		return nil, err
 	}
 
+	// Set ALPN
+	ctx.SetServerALPNProtos(alpnProtocols)
+
 	// Set SNI callback
 	ctx.SetTLSExtServernameCallback(func(ssl *ts.SSL) ts.SSLTLSExtErr {
 		serverName := ssl.GetServername()
@@ -109,11 +113,11 @@ func newNTLSServerWithSNI(acceptAddr string, certKeyPairs map[string]crypto.GMDo
 		if certKeyPair, ok := certKeyPairs[serverName]; ok {
 			if err := loadCertAndKeyForSSL(ssl, certKeyPair); err != nil {
 				log.Printf("Error loading certificate for %s: %v\n", serverName, err)
-				return ts.SSLTLSEXTErrAlertFatal
+				return ts.SSLTLSExtErrAlertFatal
 			}
 		} else {
 			log.Printf("No certificate found for %s, using default\n", serverName)
-			return ts.SSLTLSEXTErrNoAck
+			return ts.SSLTLSExtErrNoAck
 		}
 
 		return ts.SSLTLSExtErrOK
@@ -281,6 +285,7 @@ func main() {
 	encKeyFile := ""
 	caFile := ""
 	acceptAddr := ""
+	alpnProtocols := []string{"h2", "http/1.1"}
 
 	flag.StringVar(&acceptAddr, "accept", "127.0.0.1:4438", "host:port")
 	flag.StringVar(&signCertFile, "sign_cert", "test/certs/sm2/server_sign.crt", "sign certificate file")
@@ -288,6 +293,7 @@ func main() {
 	flag.StringVar(&encCertFile, "enc_cert", "test/certs/sm2/server_enc.crt", "encrypt certificate file")
 	flag.StringVar(&encKeyFile, "enc_key", "test/certs/sm2/server_enc.key", "encrypt private key file")
 	flag.StringVar(&caFile, "CAfile", "test/certs/sm2/chain-ca.crt", "CA certificate file")
+	flag.Var((*stringSlice)(&alpnProtocols), "alpn", "ALPN protocols")
 
 	flag.Parse()
 
@@ -297,7 +303,7 @@ func main() {
 		return
 	}
 
-	server, err := newNTLSServerWithSNI(acceptAddr, certFiles, caFile)
+	server, err := newNTLSServer(acceptAddr, certFiles, caFile, alpnProtocols)
 	if err != nil {
 		return
 	}
@@ -317,4 +323,18 @@ func main() {
 
 		go handleConn(conn)
 	}
+}
+
+// Define a custom type to handle string slices in command line flags
+type stringSlice []string
+
+// String method returns the string representation of the stringSlice
+func (s *stringSlice) String() string {
+	return fmt.Sprintf("%v", *s)
+}
+
+// Set method splits the input string by commas and assigns the result to the stringSlice
+func (s *stringSlice) Set(value string) error {
+	*s = strings.Split(value, ",")
+	return nil
 }

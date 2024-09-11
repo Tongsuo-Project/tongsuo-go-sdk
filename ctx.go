@@ -42,6 +42,7 @@ type Ctx struct {
 	key       crypto.PrivateKey
 	verify_cb VerifyCallback
 	sni_cb    TLSExtServernameCallback
+	alpn_cb   TLSExtAlpnCallback
 
 	encCert *crypto.Certificate
 	encKey  crypto.PrivateKey
@@ -571,6 +572,58 @@ type TLSExtServernameCallback func(ssl *SSL) SSLTLSExtErr
 func (c *Ctx) SetTLSExtServernameCallback(sni_cb TLSExtServernameCallback) {
 	c.sni_cb = sni_cb
 	C.X_SSL_CTX_set_tlsext_servername_callback(c.ctx, (*[0]byte)(C.sni_cb))
+}
+
+type TLSExtAlpnCallback func(ssl *SSL, out unsafe.Pointer, outlen unsafe.Pointer, in unsafe.Pointer, inlen uint, arg unsafe.Pointer) SSLTLSExtErr
+
+// SetServerALPNProtos sets the ALPN protocol list, if failed the negotiation will lead to server handshake failure
+func (ctx *Ctx) SetServerALPNProtos(protos []string) {
+	// Construct the protocol list (format: length byte of each protocol + protocol content)
+	var protoList []byte
+	for _, proto := range protos {
+		protoList = append(protoList, byte(len(proto))) // Add the length of the protocol
+		protoList = append(protoList, []byte(proto)...) // Add the protocol content
+	}
+
+	ctx.alpn_cb = func(ssl *SSL, out unsafe.Pointer, outlen unsafe.Pointer, in unsafe.Pointer, inlen uint, arg unsafe.Pointer) SSLTLSExtErr {
+		// Use OpenSSL function to select the protocol
+		ret := C.SSL_select_next_proto(
+			(**C.uchar)(out),
+			(*C.uchar)(outlen),
+			(*C.uchar)(unsafe.Pointer(&protoList[0])),
+			C.uint(len(protoList)),
+			(*C.uchar)(in),
+			C.uint(inlen),
+		)
+
+		if ret != OPENSSL_NPN_NEGOTIATED {
+			return SSLTLSExtErrAlertFatal
+		}
+
+		return SSLTLSExtErrOK
+	}
+	C.SSL_CTX_set_alpn_select_cb(ctx.ctx, (*[0]byte)(C.alpn_cb), nil)
+}
+
+// SetClientALPNProtos sets the ALPN protocol list
+func (ctx *Ctx) SetClientALPNProtos(protos []string) error {
+	// Construct the protocol list (format: length byte of each protocol + protocol content)
+	var protoList []byte
+	for _, proto := range protos {
+		protoList = append(protoList, byte(len(proto))) // Add the length of the protocol
+		protoList = append(protoList, []byte(proto)...) // Add the protocol content
+	}
+
+	// Convert Go's []byte to a C pointer
+	cProtoList := (*C.uchar)(C.CBytes(protoList))
+	defer C.free(unsafe.Pointer(cProtoList)) // Ensure memory is freed after use
+
+	// Call the C function to set the ALPN protocols
+	ret := C.SSL_CTX_set_alpn_protos(ctx.ctx, cProtoList, C.uint(len(protoList)))
+	if ret != 0 {
+		return errors.New("failed to set ALPN protocols")
+	}
+	return nil
 }
 
 func (c *Ctx) SetSessionId(session_id []byte) error {
