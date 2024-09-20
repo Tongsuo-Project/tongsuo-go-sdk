@@ -628,3 +628,14 @@ func (c *Conn) setSession(session []byte) error {
 	}
 	return nil
 }
+
+// GetALPNNegotiated returns the negotiated ALPN protocol
+func (c *Conn) GetALPNNegotiated() (string, error) {
+	var proto *C.uchar
+	var protoLen C.uint
+	C.SSL_get0_alpn_selected(c.ssl, &proto, &protoLen)
+	if protoLen == 0 {
+		return "", fmt.Errorf("no ALPN protocol negotiated")
+	}
+	return C.GoStringN((*C.char)(unsafe.Pointer(proto)), C.int(protoLen)), nil
+}

@@ -55,6 +55,8 @@ extern const SSL_METHOD *X_NTLS_server_method();
 #if defined SSL_CTRL_SET_TLSEXT_HOSTNAME
 extern int sni_cb(SSL *ssl_conn, int *ad, void *arg);
 #endif
+
+extern int alpn_cb(SSL *ssl_conn, const unsigned char **out, unsigned char *outlen, const unsigned char *in, unsigned int inlen, void *arg);
 extern int X_SSL_verify_cb(int ok, X509_STORE_CTX* store);
 
 /* SSL_CTX methods */

@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	ts "github.com/tongsuo-project/tongsuo-go-sdk"
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
@@ -26,6 +27,7 @@ func main() {
 	caFile := ""
 	connAddr := ""
 	serverName := ""
+	alpnProtocols := []string{"h2", "http/1.1"}
 
 	flag.StringVar(&connAddr, "conn", "127.0.0.1:4438", "host:port")
 	flag.StringVar(&cipherSuite, "cipher", "ECC-SM2-SM4-CBC-SM3", "cipher suite")
@@ -35,11 +37,16 @@ func main() {
 	flag.StringVar(&encKeyFile, "enc_key", "test/certs/sm2/client_enc.key", "encrypt private key file")
 	flag.StringVar(&caFile, "CAfile", "test/certs/sm2/chain-ca.crt", "CA certificate file")
 	flag.StringVar(&serverName, "servername", "", "server name")
+	flag.Var((*stringSlice)(&alpnProtocols), "alpn", "ALPN protocols")
 
 	flag.Parse()
 
 	ctx, err := ts.NewCtxWithVersion(ts.NTLS)
 	if err != nil {
+		panic(err)
+	}
+
+	if err := ctx.SetClientALPNProtos(alpnProtocols); err != nil {
 		panic(err)
 	}
 
@@ -120,6 +127,14 @@ func main() {
 	}
 	defer conn.Close()
 
+	// Get the negotiated ALPN protocol
+	negotiatedProto, err := conn.GetALPNNegotiated()
+	if err != nil {
+		fmt.Println("Failed to get negotiated ALPN protocol:", err)
+	} else {
+		fmt.Println("Negotiated ALPN protocol:", negotiatedProto)
+	}
+
 	cipher, err := conn.CurrentCipher()
 	if err != nil {
 		panic(err)
@@ -151,4 +166,18 @@ func main() {
 	fmt.Println("<<<\n" + string(buffer[:n]))
 
 	return
+}
+
+// Define a custom type to handle string slices in command line flags
+type stringSlice []string
+
+// String method returns the string representation of the stringSlice
+func (s *stringSlice) String() string {
+	return fmt.Sprintf("%v", *s)
+}
+
+// Set method splits the input string by commas and assigns the result to the stringSlice
+func (s *stringSlice) Set(value string) error {
+	*s = strings.Split(value, ",")
+	return nil
 }
