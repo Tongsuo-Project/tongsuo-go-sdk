@@ -615,8 +615,15 @@ func (c *Conn) setSession(session []byte) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	ptr := (*C.uchar)(&session[0])
-	s := C.d2i_SSL_SESSION(nil, &ptr, C.long(len(session)))
+	if len(session) == 0 {
+		return fmt.Errorf("session is empty")
+	}
+
+	cSession := C.CBytes(session)
+	defer C.free(unsafe.Pointer(cSession))
+
+	ptr := (*C.uchar)(cSession)
+	s := C.d2i_SSL_SESSION(nil, (**C.uchar)(&ptr), C.long(len(session)))
 	if s == nil {
 		return fmt.Errorf("unable to load session: %s", crypto.ErrorFromErrorQueue())
 	}
