@@ -2,6 +2,7 @@ package tongsuogo
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"log"
@@ -274,7 +275,7 @@ func testNTLS(t *testing.T, tmpDir string) {
 				}
 			}
 
-			conn, err := Dial("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification, "")
+			conn, err := DialSession("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification, nil, "")
 			if err != nil {
 				t.Error(err)
 				return
@@ -441,7 +442,7 @@ func TestNTLS(t *testing.T) {
 				}
 			}
 
-			conn, err := Dial("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification, "")
+			conn, err := DialSession("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification, nil, "")
 			if err != nil {
 				t.Error(err)
 				return
@@ -664,10 +665,6 @@ func TestSNI(t *testing.T) {
 	go server.Run()
 
 	// Run Client
-	signCertFile := "test/certs/sm2/client_sign.crt"
-	signKeyFile := "test/certs/sm2/client_sign.key"
-	encCertFile := "test/certs/sm2/client_enc.crt"
-	encKeyFile := "test/certs/sm2/client_enc.key"
 	caFile := "test/certs/sm2/chain-ca.crt"
 	connAddr := "127.0.0.1:4433"
 
@@ -682,66 +679,6 @@ func TestSNI(t *testing.T) {
 		return
 	}
 
-	signCertPEM, err2 := os.ReadFile(signCertFile)
-	if err2 != nil {
-		t.Error(err2)
-		return
-	}
-	signCert, err2 := crypto.LoadCertificateFromPEM(signCertPEM)
-	if err2 != nil {
-		t.Error(err2)
-		return
-	}
-	if err := ctx.UseSignCertificate(signCert); err != nil {
-		t.Error(err)
-		return
-	}
-
-	signKeyPEM, err3 := os.ReadFile(signKeyFile)
-	if err3 != nil {
-		t.Error(err3)
-		return
-	}
-	signKey, err3 := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
-	if err3 != nil {
-		t.Error(err3)
-		return
-	}
-	if err := ctx.UseSignPrivateKey(signKey); err != nil {
-		t.Error(err)
-		return
-	}
-
-	encCertPEM, err4 := os.ReadFile(encCertFile)
-	if err4 != nil {
-		t.Error(err4)
-		return
-	}
-	encCert, err4 := crypto.LoadCertificateFromPEM(encCertPEM)
-	if err4 != nil {
-		t.Error(err4)
-		return
-	}
-	if err := ctx.UseEncryptCertificate(encCert); err != nil {
-		t.Error(err)
-		return
-	}
-
-	encKeyPEM, err5 := os.ReadFile(encKeyFile)
-	if err5 != nil {
-		t.Error(err5)
-		return
-	}
-	encKey, err5 := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
-	if err5 != nil {
-		t.Error(err5)
-		return
-	}
-	if err := ctx.UseEncryptPrivateKey(encKey); err != nil {
-		t.Error(err)
-		return
-	}
-
 	if err := ctx.LoadVerifyLocations(caFile, ""); err != nil {
 		t.Error(err)
 		return
@@ -751,7 +688,7 @@ func TestSNI(t *testing.T) {
 	serverName := "default"
 
 	// Connect to the server
-	conn, err := Dial("tcp", connAddr, ctx, InsecureSkipHostVerification, serverName)
+	conn, err := DialSession("tcp", connAddr, ctx, InsecureSkipHostVerification, nil, serverName)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1016,10 +953,7 @@ func TestALPN(t *testing.T) {
 	go server.RunForALPN()
 
 	// Run Client
-	signCertFile := "test/certs/sm2/client_sign.crt"
-	signKeyFile := "test/certs/sm2/client_sign.key"
-	encCertFile := "test/certs/sm2/client_enc.crt"
-	encKeyFile := "test/certs/sm2/client_enc.key"
+
 	caFile := "test/certs/sm2/chain-ca.crt"
 	connAddr := "127.0.0.1:4433"
 	alpnProtocols := []string{"h3"}
@@ -1041,73 +975,13 @@ func TestALPN(t *testing.T) {
 		return
 	}
 
-	signCertPEM, err2 := os.ReadFile(signCertFile)
-	if err2 != nil {
-		t.Error(err2)
-		return
-	}
-	signCert, err2 := crypto.LoadCertificateFromPEM(signCertPEM)
-	if err2 != nil {
-		t.Error(err2)
-		return
-	}
-	if err := ctx.UseSignCertificate(signCert); err != nil {
-		t.Error(err)
-		return
-	}
-
-	signKeyPEM, err3 := os.ReadFile(signKeyFile)
-	if err3 != nil {
-		t.Error(err3)
-		return
-	}
-	signKey, err3 := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
-	if err3 != nil {
-		t.Error(err3)
-		return
-	}
-	if err := ctx.UseSignPrivateKey(signKey); err != nil {
-		t.Error(err)
-		return
-	}
-
-	encCertPEM, err4 := os.ReadFile(encCertFile)
-	if err4 != nil {
-		t.Error(err4)
-		return
-	}
-	encCert, err4 := crypto.LoadCertificateFromPEM(encCertPEM)
-	if err4 != nil {
-		t.Error(err4)
-		return
-	}
-	if err := ctx.UseEncryptCertificate(encCert); err != nil {
-		t.Error(err)
-		return
-	}
-
-	encKeyPEM, err5 := os.ReadFile(encKeyFile)
-	if err5 != nil {
-		t.Error(err5)
-		return
-	}
-	encKey, err5 := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
-	if err5 != nil {
-		t.Error(err5)
-		return
-	}
-	if err := ctx.UseEncryptPrivateKey(encKey); err != nil {
-		t.Error(err)
-		return
-	}
-
 	if err := ctx.LoadVerifyLocations(caFile, ""); err != nil {
 		t.Error(err)
 		return
 	}
 
 	// Connect to the server
-	conn, err := Dial("tcp", connAddr, ctx, InsecureSkipHostVerification, "")
+	conn, err := DialSession("tcp", connAddr, ctx, InsecureSkipHostVerification, nil, "")
 	if err != nil {
 		t.Log(err)
 		return
@@ -1240,6 +1114,206 @@ func newNTLSServerWithALPN(t *testing.T, testDir string, options ...func(sslctx 
 		t.Error(err)
 		return nil, err
 	}
+
+	lis, err := Listen("tcp", "127.0.0.1:4433", ctx)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	return &echoServer{lis}, nil
+}
+
+// TestSessionReuse Test session reuse
+func TestSessionReuse(t *testing.T) {
+	// Run server
+	// Execute for loop to test various CacheModes
+	for _, cacheMode := range []SessionCacheModes{
+		SessionCacheOff,
+		SessionCacheClient,
+		SessionCacheServer,
+		SessionCacheBoth,
+	} {
+		t.Run(fmt.Sprintf("cacheMode: %d", cacheMode), func(t *testing.T) {
+			server, err := newNTLSServerWithSessionReuse(t, testCertDir, cacheMode, func(sslctx *Ctx) error {
+				return sslctx.SetCipherList("ECC-SM2-SM4-CBC-SM3")
+			})
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			defer server.Close()
+			go server.Run()
+
+			// Run client
+			caFile := "test/certs/sm2/chain-ca.crt"
+			connAddr := "127.0.0.1:4433"
+
+			ctx, err := NewCtxWithVersion(NTLS)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			ctx.SetOptions(NoTicket)
+			if err := ctx.SetCipherList("ECC-SM2-SM4-CBC-SM3"); err != nil {
+				t.Error(err)
+				return
+			}
+
+			if err := ctx.LoadVerifyLocations(caFile, ""); err != nil {
+				t.Error(err)
+				return
+			}
+
+			// Connect to the server, and get reused session, use session to connect again
+			// Use a for loop to connect 2 times
+			var sessions = make([][]byte, 2)
+			var session []byte
+			for i := 0; i < 2; i++ {
+				conn, err := DialSession("tcp", connAddr, ctx, InsecureSkipHostVerification, session, "")
+				if err != nil {
+					t.Log(err)
+					return
+				}
+
+				// get reused session
+				sessions[i], err = conn.GetSession()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				session = sessions[i]
+
+				request := "hello tongsuo\n"
+				if _, err := conn.Write([]byte(request)); err != nil {
+					t.Error(err)
+					return
+				}
+
+				resp, err := bufio.NewReader(conn).ReadString('\n')
+				if err != nil {
+					t.Error(err)
+					return
+				}
+
+				if resp != request {
+					t.Error("response data is not expected: ", resp)
+					return
+				}
+
+				conn.Close()
+			}
+
+			switch cacheMode {
+			case SessionCacheOff, SessionCacheClient:
+				if !bytes.Equal(sessions[0], sessions[1]) {
+					t.Log("session is not reused")
+				} else {
+					t.Error("session is reused")
+				}
+			case SessionCacheServer, SessionCacheBoth:
+				if !bytes.Equal(sessions[0], sessions[1]) {
+					t.Error("session is not reused")
+				} else {
+					t.Log("session is reused")
+				}
+			}
+		})
+	}
+}
+
+func newNTLSServerWithSessionReuse(t *testing.T, testDir string, cacheMode SessionCacheModes, options ...func(sslctx *Ctx) error) (*echoServer, error) {
+	ctx, err := NewCtxWithVersion(NTLS)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	for _, f := range options {
+		if err := f(ctx); err != nil {
+			t.Error(err)
+			return nil, err
+		}
+	}
+
+	if err := ctx.LoadVerifyLocations(filepath.Join(testDir, "chain-ca.crt"), ""); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	encCertPEM, err := os.ReadFile(filepath.Join(testDir, "server_enc.crt"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	signCertPEM, err := os.ReadFile(filepath.Join(testDir, "server_sign.crt"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseEncryptCertificate(encCert); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseSignCertificate(signCert); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	encKeyPEM, err := os.ReadFile(filepath.Join(testDir, "server_enc.key"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	signKeyPEM, err := os.ReadFile(filepath.Join(testDir, "server_sign.key"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseEncryptPrivateKey(encKey); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseSignPrivateKey(signKey); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	// Set session reuse
+	sessionCacheMode := ctx.SetSessionCacheMode(cacheMode)
+	t.Log("session cache mode", sessionCacheMode, "new mode", cacheMode)
 
 	lis, err := Listen("tcp", "127.0.0.1:4433", ctx)
 	if err != nil {
