@@ -314,7 +314,7 @@ func (c *Conn) handshake() func() error {
 // triggered, it will run before the first I/O on the encrypted stream.
 func (c *Conn) Handshake() error {
 	err := tryAgain
-	for err == tryAgain {
+	for errors.Is(err, tryAgain) {
 		err = c.handleError(c.handshake())
 	}
 	go c.flushOutputBuffer()
