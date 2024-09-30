@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"log"
 	"math/big"
 	"net"
@@ -12,11 +11,14 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 const (
 	ECCSM2Cipher   = "ECC-SM2-WITH-SM4-SM3"
 	ECDHESM2Cipher = "ECDHE-SM2-WITH-SM4-SM3"
+	TLSSMGCMCipher = "TLS_SM4_GCM_SM3"
 	internalServer = true
 	enableSNI      = true
 
@@ -1314,6 +1316,289 @@ func newNTLSServerWithSessionReuse(t *testing.T, testDir string, cacheMode Sessi
 	// Set session reuse
 	sessionCacheMode := ctx.SetSessionCacheMode(cacheMode)
 	t.Log("session cache mode", sessionCacheMode, "new mode", cacheMode)
+
+	lis, err := Listen("tcp", "127.0.0.1:4433", ctx)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	return &echoServer{lis}, nil
+}
+
+func TestTLS13Connection(t *testing.T) {
+	// Run server
+	server, err := newTLS13Server(t, testCertDir)
+
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	defer server.Close()
+	go server.Run()
+
+	// Run client
+	caFile := "test/certs/sm2/chain-ca.crt"
+	connAddr := "127.0.0.1:4433"
+
+	ctx, err := NewCtxWithVersion(TLSv1_3)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if err := ctx.LoadVerifyLocations(caFile, ""); err != nil {
+		t.Error(err)
+		return
+	}
+
+	certPEM, err := os.ReadFile("test/certs/sm2/client_enc.crt")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	cert, err := crypto.LoadCertificateFromPEM(certPEM)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if err := ctx.UseCertificate(cert); err != nil {
+		t.Error(err)
+		return
+	}
+
+	keyPEM, err := os.ReadFile("test/certs/sm2/client_enc.key")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	key, err := crypto.LoadPrivateKeyFromPEM(keyPEM)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if err = ctx.UsePrivateKey(key); err != nil {
+		t.Error(err)
+		return
+	}
+
+	conn, err := Dial("tcp", connAddr, ctx, InsecureSkipHostVerification, "")
+	if err != nil {
+		t.Log(err)
+		return
+	}
+
+	defer conn.Close()
+
+	// Check the tls version
+	tlsVersion, err := conn.GetVersion()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if tlsVersion != "TLSv1.3" {
+		t.Error("tls version is not TLSv1.3")
+		return
+	}
+
+	t.Log("tls version", tlsVersion)
+
+	request := "hello tongsuo\n"
+	if _, err := conn.Write([]byte(request)); err != nil {
+		t.Error(err)
+		return
+	}
+
+	resp, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if resp != request {
+		t.Error("response data is not expected: ", resp)
+		return
+	}
+}
+
+func newTLS13Server(t *testing.T, testDir string, options ...func(sslctx *Ctx) error) (*echoServer, error) {
+	ctx, err := NewCtxWithVersion(TLSv1_3)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	for _, f := range options {
+		if err := f(ctx); err != nil {
+			t.Error(err)
+			return nil, err
+		}
+	}
+
+	if err := ctx.LoadVerifyLocations(filepath.Join(testDir, "chain-ca.crt"), ""); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	encCertPEM, err := os.ReadFile(filepath.Join(testDir, "server_enc.crt"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	Cert, err := crypto.LoadCertificateFromPEM(encCertPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseCertificate(Cert); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	KeyPEM, err := os.ReadFile(filepath.Join(testDir, "server_enc.key"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	Key, err := crypto.LoadPrivateKeyFromPEM(KeyPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UsePrivateKey(Key); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	lis, err := Listen("tcp", "127.0.0.1:4433", ctx)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	return &echoServer{lis}, nil
+}
+
+func TestTLSv13SMCipher(t *testing.T) {
+	cipher := TLSSMGCMCipher
+	testCertDir := "test/certs"
+	//caFile := filepath.Join(testCertDir, "chain-ca.crt")
+
+	// Run server
+	server, err := newTLSv13SMCipherServer(t, testCertDir, func(sslctx *Ctx) error {
+		return sslctx.SetCipherSuites(cipher)
+	})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	defer server.Close()
+	go server.Run()
+
+	// Run client
+	ctx, err := NewCtxWithVersion(TLSv1_3)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if err := ctx.SetCipherSuites(cipher); err != nil {
+		t.Error(err)
+		return
+	}
+
+	conn, err := DialSession("tcp", "127.0.0.1:4433", ctx, InsecureSkipHostVerification, nil, "")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	cipher, err = conn.CurrentCipher()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	t.Log("current cipher", cipher)
+
+	request := "hello tongsuo\n"
+	if _, err := conn.Write([]byte(request)); err != nil {
+		t.Error(err)
+		return
+	}
+
+	resp, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if resp != request {
+		t.Error("response data is not expected: ", resp)
+		return
+	}
+
+}
+
+func newTLSv13SMCipherServer(t *testing.T, testDir string, options ...func(sslctx *Ctx) error) (*echoServer, error) {
+	ctx, err := NewCtxWithVersion(TLSv1_3)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	for _, f := range options {
+		if err := f(ctx); err != nil {
+			t.Error(err)
+			return nil, err
+		}
+	}
+
+	certPEM, err := os.ReadFile(filepath.Join(testDir, "sm2-cert.pem"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	cert, err := crypto.LoadCertificateFromPEM(certPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UseCertificate(cert); err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	keyPEM, err := os.ReadFile(filepath.Join(testDir, "sm2.key"))
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	key, err := crypto.LoadPrivateKeyFromPEM(keyPEM)
+	if err != nil {
+		t.Error(err)
+		return nil, err
+	}
+
+	if err := ctx.UsePrivateKey(key); err != nil {
+		t.Error(err)
+		return nil, err
+	}
 
 	lis, err := Listen("tcp", "127.0.0.1:4433", ctx)
 	if err != nil {

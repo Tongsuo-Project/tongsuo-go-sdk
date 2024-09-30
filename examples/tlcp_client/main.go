@@ -28,7 +28,7 @@ func main() {
 	connAddr := ""
 	serverName := ""
 	alpnProtocols := []string{"h2", "http/1.1"}
-
+	tlsVersion := ""
 	flag.StringVar(&connAddr, "conn", "127.0.0.1:4438", "host:port")
 	flag.StringVar(&cipherSuite, "cipher", "ECC-SM2-SM4-CBC-SM3", "cipher suite")
 	flag.StringVar(&signCertFile, "sign_cert", "test/certs/sm2/client_sign.crt", "sign certificate file")
@@ -38,12 +38,27 @@ func main() {
 	flag.StringVar(&caFile, "CAfile", "test/certs/sm2/chain-ca.crt", "CA certificate file")
 	flag.StringVar(&serverName, "servername", "", "server name")
 	flag.Var((*stringSlice)(&alpnProtocols), "alpn", "ALPN protocols")
-
+	flag.StringVar(&tlsVersion, "tls_version", "NTLS", "TLS version")
 	flag.Parse()
 
-	ctx, err := ts.NewCtxWithVersion(ts.NTLS)
+	var version ts.SSLVersion
+	switch tlsVersion {
+	case "TLSv1.3":
+		version = ts.TLSv1_3
+	case "TLSv1.2":
+		version = ts.TLSv1_2
+	case "TLSv1.1":
+		version = ts.TLSv1_1
+	case "TLSv1":
+		version = ts.TLSv1
+	case "NTLS":
+		version = ts.NTLS
+	default:
+		version = ts.TLSv1_3
+	}
+	ctx, err := ts.NewCtxWithVersion(version)
 	if err != nil {
-		panic(err)
+		panic("NewCtxWithVersion failed: " + err.Error())
 	}
 
 	if err := ctx.SetClientALPNProtos(alpnProtocols); err != nil {
@@ -123,7 +138,7 @@ func main() {
 
 	conn, err := ts.Dial("tcp", connAddr, ctx, ts.InsecureSkipHostVerification, serverName)
 	if err != nil {
-		panic(err)
+		panic("connected failed" + err.Error())
 	}
 	defer conn.Close()
 

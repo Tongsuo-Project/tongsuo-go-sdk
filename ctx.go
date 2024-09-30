@@ -76,11 +76,12 @@ func newCtx(method *C.SSL_METHOD) (*Ctx, error) {
 type SSLVersion int
 
 const (
-	SSLv3   SSLVersion = 0x02 // Vulnerable to "POODLE" attack.
-	TLSv1   SSLVersion = 0x03
-	TLSv1_1 SSLVersion = 0x04
-	TLSv1_2 SSLVersion = 0x05
-	NTLS    SSLVersion = 0x06
+	SSLv3   SSLVersion = 0x0300 // Vulnerable to "POODLE" attack.
+	TLSv1   SSLVersion = 0x0301
+	TLSv1_1 SSLVersion = 0x0302
+	TLSv1_2 SSLVersion = 0x0303
+	TLSv1_3 SSLVersion = 0x0304
+	NTLS    SSLVersion = 0x07
 
 	// AnyVersion Make sure to disable SSLv2 and SSLv3 if you use this. SSLv3 is vulnerable
 	// to the "POODLE" attack, and SSLv2 is what, just don't even.
@@ -92,20 +93,11 @@ const (
 func NewCtxWithVersion(version SSLVersion) (*Ctx, error) {
 	var enableNTLS bool
 	var method *C.SSL_METHOD
-	switch version {
-	case SSLv3:
-		method = C.X_SSLv3_method()
-	case TLSv1:
-		method = C.X_TLSv1_method()
-	case TLSv1_1:
-		method = C.X_TLSv1_1_method()
-	case TLSv1_2:
-		method = C.X_TLSv1_2_method()
-	case NTLS:
+	if version == NTLS {
 		method = C.X_NTLS_method()
 		enableNTLS = true
-	case AnyVersion:
-		method = C.X_SSLv23_method()
+	} else {
+		method = C.TLS_method()
 	}
 	if method == nil {
 		return nil, errors.New("unknown ssl/tls version")
@@ -118,6 +110,12 @@ func NewCtxWithVersion(version SSLVersion) (*Ctx, error) {
 
 	if enableNTLS {
 		C.X_SSL_CTX_enable_ntls(c.ctx)
+	} else if version == AnyVersion {
+		C.X_SSL_CTX_set_min_proto_version(c.ctx, C.int(TLSv1))
+		C.X_SSL_CTX_set_max_proto_version(c.ctx, C.int(TLSv1_3))
+	} else {
+		C.X_SSL_CTX_set_min_proto_version(c.ctx, C.int(version))
+		C.X_SSL_CTX_set_max_proto_version(c.ctx, C.int(version))
 	}
 
 	return c, nil
@@ -649,6 +647,17 @@ func (c *Ctx) SetCipherList(list string) error {
 	clist := C.CString(list)
 	defer C.free(unsafe.Pointer(clist))
 	if int(C.SSL_CTX_set_cipher_list(c.ctx, clist)) == 0 {
+		return crypto.ErrorFromErrorQueue()
+	}
+	return nil
+}
+
+func (c *Ctx) SetCipherSuites(suites string) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	csuits := C.CString(suites)
+	defer C.free(unsafe.Pointer(csuits))
+	if int(C.SSL_CTX_set_ciphersuites(c.ctx, csuits)) == 0 {
 		return crypto.ErrorFromErrorQueue()
 	}
 	return nil

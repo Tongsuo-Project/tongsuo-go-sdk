@@ -55,7 +55,7 @@ type GMDoubleCertKey struct {
 	EncKeyFile   string
 }
 
-// X509_Version represents a version on an x509 certificate.
+// X509_Version represents a version on a x509 certificate.
 type X509_Version int
 
 // Specify constants for x509 versions because the standard states that they
@@ -362,8 +362,21 @@ func validateExtensionInput(nid NID, value string) error {
 // AddExtensions Wraps AddExtension using a map of NID to text extension.
 // Will return without finishing if it encounters an error.
 func (c *Certificate) AddExtensions(extensions map[NID]string) error {
+	targetNid := NID_authority_key_identifier
+	found := false
 	for nid, value := range extensions {
+		if nid == NID_authority_key_identifier {
+			found = true
+			continue
+		}
 		if err := c.AddExtension(nid, value); err != nil {
+			return err
+		}
+	}
+
+	// NID_authority_key_identifier depends on subject key ID, needs to be added last
+	if found {
+		if err := c.AddExtension(targetNid, extensions[targetNid]); err != nil {
 			return err
 		}
 	}

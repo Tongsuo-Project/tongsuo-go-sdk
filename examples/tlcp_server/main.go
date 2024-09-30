@@ -11,13 +11,14 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	ts "github.com/tongsuo-project/tongsuo-go-sdk"
-	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+
+	ts "github.com/tongsuo-project/tongsuo-go-sdk"
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 func ReadCertificateFiles(dirPath string) (map[string]crypto.GMDoubleCertKey, error) {
@@ -89,11 +90,30 @@ func handleConn(conn net.Conn) {
 	log.Println("Close connection")
 }
 
-func newNTLSServer(acceptAddr string, certKeyPairs map[string]crypto.GMDoubleCertKey, cafile string, alpnProtocols []string) (net.Listener, error) {
-
-	ctx, err := ts.NewCtxWithVersion(ts.NTLS)
+func newNTLSServer(acceptAddr string, certKeyPairs map[string]crypto.GMDoubleCertKey, cafile string, alpnProtocols []string, tlsVersion string) (net.Listener, error) {
+	var version ts.SSLVersion
+	switch tlsVersion {
+	case "TLSv1.3":
+		version = ts.TLSv1_3
+	case "TLSv1.2":
+		version = ts.TLSv1_2
+	case "TLSv1.1":
+		version = ts.TLSv1_1
+	case "TLSv1":
+		version = ts.TLSv1
+	case "NTLS":
+		version = ts.NTLS
+	default:
+		version = ts.TLSv1_3
+	}
+	ctx, err := ts.NewCtxWithVersion(version)
 	if err != nil {
 		log.Println(err)
+		return nil, err
+	}
+
+	err = ctx.SetCipherList("ECC-SM2-SM4-CBC-SM3")
+	if err != nil {
 		return nil, err
 	}
 
@@ -286,6 +306,7 @@ func main() {
 	caFile := ""
 	acceptAddr := ""
 	alpnProtocols := []string{"h2", "http/1.1"}
+	tlsVersion := ""
 
 	flag.StringVar(&acceptAddr, "accept", "127.0.0.1:4438", "host:port")
 	flag.StringVar(&signCertFile, "sign_cert", "test/certs/sm2/server_sign.crt", "sign certificate file")
@@ -294,7 +315,7 @@ func main() {
 	flag.StringVar(&encKeyFile, "enc_key", "test/certs/sm2/server_enc.key", "encrypt private key file")
 	flag.StringVar(&caFile, "CAfile", "test/certs/sm2/chain-ca.crt", "CA certificate file")
 	flag.Var((*stringSlice)(&alpnProtocols), "alpn", "ALPN protocols")
-
+	flag.StringVar(&tlsVersion, "tls_version", "NTLS", "TLS version")
 	flag.Parse()
 
 	certFiles, err := ReadCertificateFiles("test/sni_certs")
@@ -303,7 +324,7 @@ func main() {
 		return
 	}
 
-	server, err := newNTLSServer(acceptAddr, certFiles, caFile, alpnProtocols)
+	server, err := newNTLSServer(acceptAddr, certFiles, caFile, alpnProtocols, tlsVersion)
 	if err != nil {
 		return
 	}
