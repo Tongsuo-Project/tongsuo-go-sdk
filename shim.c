@@ -75,6 +75,14 @@ int X_SSL_verify_cb(int ok, X509_STORE_CTX* store) {
 	return go_ssl_verify_cb_thunk(p, ok, store);
 }
 
+int X_SSL_CTX_set_max_proto_version(SSL_CTX *ctx, int version) {
+	return SSL_CTX_set_max_proto_version(ctx, version);
+}
+
+int X_SSL_CTX_set_min_proto_version(SSL_CTX *ctx, int version) {
+	return SSL_CTX_set_min_proto_version(ctx, version);
+}
+
 const SSL_METHOD *X_SSLv23_method() {
 	return SSLv23_method();
 }

@@ -18,6 +18,8 @@ import (
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
+var cipherSuites = ""
+
 func main() {
 	cipherSuite := ""
 	signCertFile := ""
@@ -28,6 +30,7 @@ func main() {
 	connAddr := ""
 	serverName := ""
 	alpnProtocols := []string{"h2", "http/1.1"}
+	tlsVersion := ""
 
 	flag.StringVar(&connAddr, "conn", "127.0.0.1:4438", "host:port")
 	flag.StringVar(&cipherSuite, "cipher", "ECC-SM2-SM4-CBC-SM3", "cipher suite")
@@ -38,92 +41,113 @@ func main() {
 	flag.StringVar(&caFile, "CAfile", "test/certs/sm2/chain-ca.crt", "CA certificate file")
 	flag.StringVar(&serverName, "servername", "", "server name")
 	flag.Var((*stringSlice)(&alpnProtocols), "alpn", "ALPN protocols")
-
+	flag.StringVar(&tlsVersion, "version", "NTLS", "TLS version")
+	flag.StringVar(&cipherSuites, "ciphersuites", "ECC-SM2-SM4-CBC-SM3", "cipherSuites")
 	flag.Parse()
 
-	ctx, err := ts.NewCtxWithVersion(ts.NTLS)
+	var version ts.SSLVersion
+	switch tlsVersion {
+	case "TLSv1.3":
+		version = ts.TLSv1_3
+	case "TLSv1.2":
+		version = ts.TLSv1_2
+	case "TLSv1.1":
+		version = ts.TLSv1_1
+	case "TLSv1":
+		version = ts.TLSv1
+	case "NTLS":
+		version = ts.NTLS
+	default:
+		version = ts.NTLS
+	}
+	ctx, err := ts.NewCtxWithVersion(version)
 	if err != nil {
-		panic(err)
+		panic("NewCtxWithVersion failed: " + err.Error())
 	}
 
 	if err := ctx.SetClientALPNProtos(alpnProtocols); err != nil {
 		panic(err)
 	}
 
-	if err := ctx.SetCipherList(cipherSuite); err != nil {
-		panic(err)
-	}
+	if version >= ts.TLSv1_3 {
+		if err := ctx.SetCipherSuites(cipherSuites); err != nil {
+			panic(err)
+		}
+	} else {
+		if err := ctx.SetCipherList(cipherSuites); err != nil {
+			panic(err)
+		}
+		if signCertFile != "" {
+			signCertPEM, err := os.ReadFile(signCertFile)
+			if err != nil {
+				panic(err)
+			}
+			signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
+			if err != nil {
+				panic(err)
+			}
 
-	if signCertFile != "" {
-		signCertPEM, err := os.ReadFile(signCertFile)
-		if err != nil {
-			panic(err)
-		}
-		signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
-		if err != nil {
-			panic(err)
-		}
-
-		if err := ctx.UseSignCertificate(signCert); err != nil {
-			panic(err)
-		}
-	}
-
-	if signKeyFile != "" {
-		signKeyPEM, err := os.ReadFile(signKeyFile)
-		if err != nil {
-			panic(err)
-		}
-		signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
-		if err != nil {
-			panic(err)
+			if err := ctx.UseSignCertificate(signCert); err != nil {
+				panic(err)
+			}
 		}
 
-		if err := ctx.UseSignPrivateKey(signKey); err != nil {
-			panic(err)
-		}
-	}
+		if signKeyFile != "" {
+			signKeyPEM, err := os.ReadFile(signKeyFile)
+			if err != nil {
+				panic(err)
+			}
+			signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
+			if err != nil {
+				panic(err)
+			}
 
-	if encCertFile != "" {
-		encCertPEM, err := os.ReadFile(encCertFile)
-		if err != nil {
-			panic(err)
-		}
-		encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
-		if err != nil {
-			panic(err)
-		}
-
-		if err := ctx.UseEncryptCertificate(encCert); err != nil {
-			panic(err)
-		}
-	}
-
-	if encKeyFile != "" {
-		encKeyPEM, err := os.ReadFile(encKeyFile)
-		if err != nil {
-			panic(err)
+			if err := ctx.UseSignPrivateKey(signKey); err != nil {
+				panic(err)
+			}
 		}
 
-		encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
-		if err != nil {
-			panic(err)
+		if encCertFile != "" {
+			encCertPEM, err := os.ReadFile(encCertFile)
+			if err != nil {
+				panic(err)
+			}
+			encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
+			if err != nil {
+				panic(err)
+			}
+
+			if err := ctx.UseEncryptCertificate(encCert); err != nil {
+				panic(err)
+			}
 		}
 
-		if err := ctx.UseEncryptPrivateKey(encKey); err != nil {
-			panic(err)
-		}
-	}
+		if encKeyFile != "" {
+			encKeyPEM, err := os.ReadFile(encKeyFile)
+			if err != nil {
+				panic(err)
+			}
 
-	if caFile != "" {
-		if err := ctx.LoadVerifyLocations(caFile, ""); err != nil {
-			panic(err)
+			encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
+			if err != nil {
+				panic(err)
+			}
+
+			if err := ctx.UseEncryptPrivateKey(encKey); err != nil {
+				panic(err)
+			}
+		}
+
+		if caFile != "" {
+			if err := ctx.LoadVerifyLocations(caFile, ""); err != nil {
+				panic(err)
+			}
 		}
 	}
 
 	conn, err := ts.Dial("tcp", connAddr, ctx, ts.InsecureSkipHostVerification, serverName)
 	if err != nil {
-		panic(err)
+		panic("connected failed" + err.Error())
 	}
 	defer conn.Close()
 
