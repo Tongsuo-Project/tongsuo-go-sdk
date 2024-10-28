@@ -8,14 +8,10 @@
 package sm2
 
 // #include "../shim.h"
-// #cgo linux LDFLAGS: -lcrypto
-// #cgo darwin LDFLAGS: -lcrypto
-// #cgo windows CFLAGS: -Wall -DWIN32_LEAN_AND_MEAN
-// #cgo windows pkg-config: libcrypto
 import "C"
 
 import (
-	"errors"
+	"fmt"
 	"math/big"
 	"unsafe"
 
@@ -24,27 +20,37 @@ import (
 
 // VerifyASN1 verifies ASN.1 encoded signature. Returns nil on success.
 func VerifyASN1(pub crypto.PublicKey, data, sig []byte) error {
-	if pub.KeyType() != crypto.NID_sm2 {
-		return errors.New("SM2: key type is not sm2")
+	if pub.KeyType() != crypto.NidSM2 {
+		return fmt.Errorf("key type is not sm2: %w", crypto.ErrWrongKeyType)
 	}
 
-	return pub.VerifyPKCS1v15(crypto.SM3_Method, data, sig)
+	err := pub.VerifyPKCS1v15(crypto.SM3Method(), data, sig)
+	if err != nil {
+		return fmt.Errorf("failed to verify: %w", err)
+	}
+
+	return nil
 }
 
 // SignASN1 signs the data with priv and returns ASN.1 encoded signature.
 func SignASN1(priv crypto.PrivateKey, data []byte) ([]byte, error) {
-	if priv.KeyType() != crypto.NID_sm2 {
-		return nil, errors.New("SM2: key type is not sm2")
+	if priv.KeyType() != crypto.NidSM2 {
+		return nil, fmt.Errorf("key type is not sm2: %w", crypto.ErrWrongKeyType)
 	}
 
-	return priv.SignPKCS1v15(crypto.SM3_Method, data)
+	ret, err := priv.SignPKCS1v15(crypto.SM3Method(), data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign: %w", err)
+	}
+
+	return ret, nil
 }
 
 // Verify verifies the signature in r, s of data using the public key, pub.
 // Returns nil on success.
 func Verify(pub crypto.PublicKey, data []byte, r, s *big.Int) error {
-	if pub.KeyType() != crypto.NID_sm2 {
-		return errors.New("SM2: key type is not sm2")
+	if pub.KeyType() != crypto.NidSM2 {
+		return fmt.Errorf("key type is not sm2 %w", crypto.ErrWrongKeyType)
 	}
 
 	sm2Sig := C.ECDSA_SIG_new()
@@ -55,29 +61,29 @@ func Verify(pub crypto.PublicKey, data []byte, r, s *big.Int) error {
 
 	ret := C.ECDSA_SIG_set0(sm2Sig, rBig, sBig)
 	if ret != 1 {
-		return errors.New("SM2: set r,s failed")
+		return fmt.Errorf("failed to set r/s: %w", crypto.ErrNilParameter)
 	}
 
-	len := C.i2d_ECDSA_SIG(sm2Sig, nil)
+	len1 := C.i2d_ECDSA_SIG(sm2Sig, nil)
 
-	buf := (*C.uchar)(C.malloc(C.size_t(len)))
+	buf := (*C.uchar)(C.malloc(C.size_t(len1)))
 	defer C.free(unsafe.Pointer(buf))
 
 	tmp := buf
 	len2 := C.i2d_ECDSA_SIG(sm2Sig, &tmp)
 
-	return VerifyASN1(pub, data, C.GoBytes(unsafe.Pointer(buf), C.int(len2)))
+	return VerifyASN1(pub, data, C.GoBytes(unsafe.Pointer(buf), len2))
 }
 
 // Sign signs the data with the private key, priv.
-func Sign(priv crypto.PrivateKey, data []byte) (r, s *big.Int, err error) {
-	if priv.KeyType() != crypto.NID_sm2 {
-		return nil, nil, errors.New("SM2: key type is not sm2")
+func Sign(priv crypto.PrivateKey, data []byte) (*big.Int, *big.Int, error) {
+	if priv.KeyType() != crypto.NidSM2 {
+		return nil, nil, fmt.Errorf("key type is not sm2: %w", crypto.ErrWrongKeyType)
 	}
 
-	sig, err := priv.SignPKCS1v15(crypto.SM3_Method, data)
+	sig, err := priv.SignPKCS1v15(crypto.SM3Method(), data)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to sign data: %w", err)
 	}
 
 	buf := (*C.uchar)(C.malloc(C.size_t(len(sig))))
@@ -86,7 +92,7 @@ func Sign(priv crypto.PrivateKey, data []byte) (r, s *big.Int, err error) {
 
 	sm2Sig := C.d2i_ECDSA_SIG(nil, &buf, C.long(len(sig)))
 	if sm2Sig == nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to decode signature: %w", err)
 	}
 	defer C.ECDSA_SIG_free(sm2Sig)
 
@@ -99,17 +105,17 @@ func Sign(priv crypto.PrivateKey, data []byte) (r, s *big.Int, err error) {
 	rLen := C.BN_bn2bin(rBig, (*C.uchar)(unsafe.Pointer(&rBytes[0])))
 	sLen := C.BN_bn2bin(sBig, (*C.uchar)(unsafe.Pointer(&sBytes[0])))
 
-	r = new(big.Int).SetBytes(rBytes[:rLen])
-	s = new(big.Int).SetBytes(sBytes[:sLen])
+	r := new(big.Int).SetBytes(rBytes[:rLen])
+	s := new(big.Int).SetBytes(sBytes[:sLen])
 
 	return r, s, nil
 }
 
 // GenerateKey generates a new SM2 key pair.
 func GenerateKey() (crypto.PrivateKey, error) {
-	priv, err := crypto.GenerateECKey(crypto.Sm2Curve)
+	priv, err := crypto.GenerateECKey(crypto.SM2Curve)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create key: %w", err)
 	}
 
 	return priv, nil
@@ -117,18 +123,28 @@ func GenerateKey() (crypto.PrivateKey, error) {
 
 // Encrypt encrypts the data with the public key, publ.
 func Encrypt(pub crypto.PublicKey, data []byte) ([]byte, error) {
-	if pub.KeyType() != crypto.NID_sm2 {
-		return nil, errors.New("SM2: key type is not sm2")
+	if pub.KeyType() != crypto.NidSM2 {
+		return nil, fmt.Errorf("key type is not sm2: %w", crypto.ErrWrongKeyType)
 	}
 
-	return pub.Encrypt(data)
+	ret, err := pub.Encrypt(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt: %w", err)
+	}
+
+	return ret, nil
 }
 
 // Decrypt decrypts the ciphertext with the private key, priv.
 func Decrypt(priv crypto.PrivateKey, data []byte) ([]byte, error) {
-	if priv.KeyType() != crypto.NID_sm2 {
-		return nil, errors.New("SM2: key type is not sm2")
+	if priv.KeyType() != crypto.NidSM2 {
+		return nil, fmt.Errorf("key type is not sm2: %w", crypto.ErrWrongKeyType)
 	}
 
-	return priv.Decrypt(data)
+	ret, err := priv.Decrypt(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt: %w", err)
+	}
+
+	return ret, nil
 }

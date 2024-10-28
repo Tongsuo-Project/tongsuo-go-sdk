@@ -18,7 +18,6 @@ package crypto
 import "C"
 
 import (
-	"fmt"
 	"unsafe"
 )
 
@@ -38,7 +37,7 @@ func GetDigestByName(name string) (*Digest, error) {
 	defer C.free(unsafe.Pointer(cname))
 	p := C.X_EVP_get_digestbyname(cname)
 	if p == nil {
-		return nil, fmt.Errorf("Digest %v not found", name)
+		return nil, ErrUnsupportedDigest
 	}
 	// we can consider digests to use static mem; don't need to free
 	return &Digest{ptr: p}, nil

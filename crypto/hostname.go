@@ -34,13 +34,8 @@ extern int X509_check_ip(X509 *x, const unsigned char *chk, size_t chklen,
 import "C"
 
 import (
-	"errors"
 	"net"
 	"unsafe"
-)
-
-var (
-	ValidationError = errors.New("Host validation error")
 )
 
 type CheckFlags int
@@ -65,9 +60,13 @@ func (c *Certificate) CheckHost(host string, flags CheckFlags) error {
 		return nil
 	}
 	if rv == 0 {
-		return ValidationError
+		return ErrMatchFailed
 	}
-	return errors.New("hostname validation had an internal failure")
+	if rv == -2 {
+		return ErrInputInvalid
+	}
+
+	return ErrInternalError
 }
 
 // CheckEmail checks that the X509 certificate is signed for the provided
@@ -84,9 +83,13 @@ func (c *Certificate) CheckEmail(email string, flags CheckFlags) error {
 		return nil
 	}
 	if rv == 0 {
-		return ValidationError
+		return ErrMatchFailed
 	}
-	return errors.New("email validation had an internal failure")
+	if rv == -2 {
+		return ErrInputInvalid
+	}
+
+	return ErrInternalError
 }
 
 // CheckIP checks that the X509 certificate is signed for the provided
@@ -108,9 +111,13 @@ func (c *Certificate) CheckIP(ip net.IP, flags CheckFlags) error {
 		return nil
 	}
 	if rv == 0 {
-		return ValidationError
+		return ErrMatchFailed
 	}
-	return errors.New("ip validation had an internal failure")
+	if rv == -2 {
+		return ErrInputInvalid
+	}
+
+	return ErrInternalError
 }
 
 // VerifyHostname is a combination of CheckHost and CheckIP. If the provided

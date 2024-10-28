@@ -36,18 +36,18 @@ func (e *Engine) Engine() *C.ENGINE {
 	return e.e
 }
 
-func EngineById(name string) (*Engine, error) {
+func EngineByID(name string) (*Engine, error) {
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
 	e := &Engine{
 		e: C.ENGINE_by_id(cname),
 	}
 	if e.e == nil {
-		return nil, fmt.Errorf("engine %s missing", name)
+		return nil, ErrNoEngine
 	}
 	if C.ENGINE_init(e.e) == 0 {
 		C.ENGINE_free(e.e)
-		return nil, fmt.Errorf("engine %s not initialized", name)
+		return nil, fmt.Errorf("failed to init engine: %w", PopError())
 	}
 	runtime.SetFinalizer(e, func(e *Engine) {
 		C.ENGINE_finish(e.e)

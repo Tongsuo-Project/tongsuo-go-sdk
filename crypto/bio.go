@@ -18,9 +18,8 @@ package crypto
 import "C"
 
 import (
-	"errors"
+	"fmt"
 	"io"
-	"reflect"
 	"sync"
 	"unsafe"
 )
@@ -30,12 +29,7 @@ const (
 )
 
 func nonCopyGoBytes(ptr uintptr, length int) []byte {
-	var slice []byte
-	header := (*reflect.SliceHeader)(unsafe.Pointer(&slice))
-	header.Cap = length
-	header.Len = length
-	header.Data = ptr
-	return slice
+	return unsafe.Slice((*byte)(unsafe.Pointer(ptr)), length)
 }
 
 func nonCopyCString(data *C.char, size C.int) []byte {
@@ -45,14 +39,15 @@ func nonCopyCString(data *C.char, size C.int) []byte {
 var writeBioMapping = newMapping()
 
 type WriteBio struct {
-	data_mtx        sync.Mutex
-	op_mtx          sync.Mutex
-	buf             []byte
-	release_buffers bool
+	dataMtx        sync.Mutex
+	opMtx          sync.Mutex
+	buf            []byte
+	releaseBuffers bool
 }
 
 func loadWritePtr(b *C.BIO) *WriteBio {
 	t := token(C.X_BIO_get_data(b))
+
 	return (*WriteBio)(writeBioMapping.Get(t))
 }
 
@@ -65,41 +60,50 @@ func bioSetRetryRead(b *C.BIO) {
 }
 
 //export go_write_bio_write
-func go_write_bio_write(b *C.BIO, data *C.char, size C.int) (rc C.int) {
+func go_write_bio_write(bio *C.BIO, data *C.char, size C.int) C.int {
+	var rc C.int
+
 	defer func() {
 		if err := recover(); err != nil {
-			//logger.Critf("openssl: writeBioWrite panic'd: %v", err)
+			// logger.Critf("openssl: writeBioWrite panic'd: %v", err)
 			rc = -1
 		}
 	}()
-	ptr := loadWritePtr(b)
+	ptr := loadWritePtr(bio)
 	if ptr == nil || data == nil || size < 0 {
 		return -1
 	}
-	ptr.data_mtx.Lock()
-	defer ptr.data_mtx.Unlock()
-	bioClearRetryFlags(b)
+	ptr.dataMtx.Lock()
+	defer ptr.dataMtx.Unlock()
+	bioClearRetryFlags(bio)
 	ptr.buf = append(ptr.buf, nonCopyCString(data, size)...)
-	return size
+	rc = size
+
+	return rc
 }
 
 //export go_write_bio_ctrl
-func go_write_bio_ctrl(b *C.BIO, cmd C.int, arg1 C.long, arg2 unsafe.Pointer) (
-	rc C.long) {
+func go_write_bio_ctrl(bio *C.BIO, cmd C.int, arg1 C.long, arg2 unsafe.Pointer) C.long {
+	_, _ = arg1, arg2 // unused
+
+	var rc C.long
+
 	defer func() {
 		if err := recover(); err != nil {
-			//logger.Critf("openssl: writeBioCtrl panic'd: %v", err)
+			// logger.Critf("openssl: writeBioCtrl panic'd: %v", err)
 			rc = -1
 		}
 	}()
 	switch cmd {
 	case C.BIO_CTRL_WPENDING:
-		return writeBioPending(b)
+		rc = writeBioPending(bio)
 	case C.BIO_CTRL_DUP, C.BIO_CTRL_FLUSH:
-		return 1
+		rc = 1
 	default:
-		return 0
+		rc = 0
 	}
+
+	return rc
 }
 
 func writeBioPending(b *C.BIO) C.long {
@@ -107,64 +111,66 @@ func writeBioPending(b *C.BIO) C.long {
 	if ptr == nil {
 		return 0
 	}
-	ptr.data_mtx.Lock()
-	defer ptr.data_mtx.Unlock()
+	ptr.dataMtx.Lock()
+	defer ptr.dataMtx.Unlock()
+
 	return C.long(len(ptr.buf))
 }
 
-func (b *WriteBio) WriteTo(w io.Writer) (rv int64, err error) {
-	b.op_mtx.Lock()
-	defer b.op_mtx.Unlock()
+func (bio *WriteBio) WriteTo(writer io.Writer) (int64, error) {
+	bio.opMtx.Lock()
+	defer bio.opMtx.Unlock()
 
 	// write whatever data we currently have
-	b.data_mtx.Lock()
-	data := b.buf
-	b.data_mtx.Unlock()
+	bio.dataMtx.Lock()
+	data := bio.buf
+	bio.dataMtx.Unlock()
 
 	if len(data) == 0 {
 		return 0, nil
 	}
-	n, err := w.Write(data)
+	n, err := writer.Write(data)
 
 	// subtract however much data we wrote from the buffer
-	b.data_mtx.Lock()
-	b.buf = b.buf[:copy(b.buf, b.buf[n:])]
-	if b.release_buffers && len(b.buf) == 0 {
-		b.buf = nil
+	bio.dataMtx.Lock()
+	bio.buf = bio.buf[:copy(bio.buf, bio.buf[n:])]
+	if bio.releaseBuffers && len(bio.buf) == 0 {
+		bio.buf = nil
 	}
-	b.data_mtx.Unlock()
+	bio.dataMtx.Unlock()
 
 	return int64(n), err
 }
 
-func (b *WriteBio) SetRelease(flag bool) {
-	b.data_mtx.Lock()
-	defer b.data_mtx.Unlock()
-	b.release_buffers = flag
+func (bio *WriteBio) SetRelease(flag bool) {
+	bio.dataMtx.Lock()
+	defer bio.dataMtx.Unlock()
+	bio.releaseBuffers = flag
 }
 
-func (self *WriteBio) Disconnect(b *C.BIO) {
-	if loadWritePtr(b) == self {
+func (bio *WriteBio) Disconnect(b *C.BIO) {
+	if loadWritePtr(b) == bio {
 		writeBioMapping.Del(token(C.X_BIO_get_data(b)))
 		C.X_BIO_set_data(b, nil)
 	}
 }
 
-func (b *WriteBio) MakeCBIO() *C.BIO {
+func (bio *WriteBio) MakeCBIO() *C.BIO {
 	rv := C.X_BIO_new_write_bio()
-	token := writeBioMapping.Add(unsafe.Pointer(b))
+	token := writeBioMapping.Add(unsafe.Pointer(bio))
 	C.X_BIO_set_data(rv, unsafe.Pointer(token))
+
 	return rv
 }
 
 var readBioMapping = newMapping()
 
 type ReadBio struct {
-	data_mtx        sync.Mutex
-	op_mtx          sync.Mutex
-	buf             []byte
-	eof             bool
-	release_buffers bool
+	dataMtx        sync.Mutex
+	opMtx          sync.Mutex
+	buf            []byte
+	eof            bool
+	releaseBuffers bool
 }
 
 func loadReadPtr(b *C.BIO) *ReadBio {
@@ -172,56 +178,61 @@ func loadReadPtr(b *C.BIO) *ReadBio {
 }
 
 //export go_read_bio_read
-func go_read_bio_read(b *C.BIO, data *C.char, size C.int) (rc C.int) {
+func go_read_bio_read(bio *C.BIO, data *C.char, size C.int) C.int {
+	rc := 0
+
 	defer func() {
 		if err := recover(); err != nil {
-			//logger.Critf("openssl: go_read_bio_read panic'd: %v", err)
+			// logger.Critf("openssl: go_read_bio_read panic'd: %v", err)
 			rc = -1
 		}
 	}()
-	ptr := loadReadPtr(b)
+	ptr := loadReadPtr(bio)
 	if ptr == nil || size < 0 {
 		return -1
 	}
-	ptr.data_mtx.Lock()
-	defer ptr.data_mtx.Unlock()
-	bioClearRetryFlags(b)
+	ptr.dataMtx.Lock()
+	defer ptr.dataMtx.Unlock()
+	bioClearRetryFlags(bio)
 	if len(ptr.buf) == 0 {
 		if ptr.eof {
 			return 0
 		}
-		bioSetRetryRead(b)
+		bioSetRetryRead(bio)
 		return -1
 	}
 	if size == 0 || data == nil {
 		return C.int(len(ptr.buf))
 	}
-	n := copy(nonCopyCString(data, size), ptr.buf)
-	ptr.buf = ptr.buf[:copy(ptr.buf, ptr.buf[n:])]
-	if ptr.release_buffers && len(ptr.buf) == 0 {
+	rc = copy(nonCopyCString(data, size), ptr.buf)
+	ptr.buf = ptr.buf[:copy(ptr.buf, ptr.buf[rc:])]
+	if ptr.releaseBuffers && len(ptr.buf) == 0 {
 		ptr.buf = nil
 	}
-	return C.int(n)
+	return C.int(rc)
 }
 
 //export go_read_bio_ctrl
-func go_read_bio_ctrl(b *C.BIO, cmd C.int, arg1 C.long, arg2 unsafe.Pointer) (
-	rc C.long) {
+func go_read_bio_ctrl(bio *C.BIO, cmd C.int, arg1 C.long, arg2 unsafe.Pointer) C.long {
+	_, _ = arg1, arg2 // unused
 
+	var rc C.long
 	defer func() {
 		if err := recover(); err != nil {
-			//logger.Critf("openssl: readBioCtrl panic'd: %v", err)
+			// logger.Critf("openssl: readBioCtrl panic'd: %v", err)
 			rc = -1
 		}
 	}()
 	switch cmd {
 	case C.BIO_CTRL_PENDING:
-		return readBioPending(b)
+		rc = readBioPending(bio)
 	case C.BIO_CTRL_DUP, C.BIO_CTRL_FLUSH:
-		return 1
+		rc = 1
 	default:
-		return 0
+		rc = 0
 	}
+
+	return rc
 }
 
 func readBioPending(b *C.BIO) C.long {
@@ -229,89 +240,98 @@ func readBioPending(b *C.BIO) C.long {
 	if ptr == nil {
 		return 0
 	}
-	ptr.data_mtx.Lock()
-	defer ptr.data_mtx.Unlock()
+	ptr.dataMtx.Lock()
+	defer ptr.dataMtx.Unlock()
 	return C.long(len(ptr.buf))
 }
 
-func (b *ReadBio) SetRelease(flag bool) {
-	b.data_mtx.Lock()
-	defer b.data_mtx.Unlock()
-	b.release_buffers = flag
+func (bio *ReadBio) SetRelease(flag bool) {
+	bio.dataMtx.Lock()
+	defer bio.dataMtx.Unlock()
+	bio.releaseBuffers = flag
 }
 
-func (b *ReadBio) ReadFromOnce(r io.Reader) (n int, err error) {
-	b.op_mtx.Lock()
-	defer b.op_mtx.Unlock()
+func (bio *ReadBio) ReadFromOnce(r io.Reader) (int, error) {
+	bio.opMtx.Lock()
+	defer bio.opMtx.Unlock()
 
 	// make sure we have a destination that fits at least one SSL record
-	b.data_mtx.Lock()
-	if cap(b.buf) < len(b.buf)+SSLRecordSize {
-		new_buf := make([]byte, len(b.buf), len(b.buf)+SSLRecordSize)
-		copy(new_buf, b.buf)
-		b.buf = new_buf
+	bio.dataMtx.Lock()
+	if cap(bio.buf) < len(bio.buf)+SSLRecordSize {
+		newBuf := make([]byte, len(bio.buf), len(bio.buf)+SSLRecordSize)
+		copy(newBuf, bio.buf)
+		bio.buf = newBuf
 	}
-	dst := b.buf[len(b.buf):cap(b.buf)]
-	dst_slice := b.buf
-	b.data_mtx.Unlock()
 
-	n, err = r.Read(dst)
-	b.data_mtx.Lock()
-	defer b.data_mtx.Unlock()
+	dst := bio.buf[len(bio.buf):cap(bio.buf)]
+	dstSlice := bio.buf
+	bio.dataMtx.Unlock()
+
+	n, err := r.Read(dst)
+	bio.dataMtx.Lock()
+	defer bio.dataMtx.Unlock()
 	if n > 0 {
-		if len(dst_slice) != len(b.buf) {
+		if len(dstSlice) != len(bio.buf) {
 			// someone shrunk the buffer, so we read in too far ahead and we
 			// need to slide backwards
-			copy(b.buf[len(b.buf):len(b.buf)+n], dst)
+			copy(bio.buf[len(bio.buf):len(bio.buf)+n], dst)
 		}
-		b.buf = b.buf[:len(b.buf)+n]
+		bio.buf = bio.buf[:len(bio.buf)+n]
 	}
-	return n, err
+
+	if err != nil {
+		return n, fmt.Errorf("read from once error: %w", err)
+	}
+
+	return n, nil
 }
 
-func (b *ReadBio) MakeCBIO() *C.BIO {
+func (bio *ReadBio) MakeCBIO() *C.BIO {
 	rv := C.X_BIO_new_read_bio()
-	token := readBioMapping.Add(unsafe.Pointer(b))
+	token := readBioMapping.Add(unsafe.Pointer(bio))
 	C.X_BIO_set_data(rv, unsafe.Pointer(token))
 	return rv
 }
 
-func (self *ReadBio) Disconnect(b *C.BIO) {
-	if loadReadPtr(b) == self {
+func (bio *ReadBio) Disconnect(b *C.BIO) {
+	if loadReadPtr(b) == bio {
 		readBioMapping.Del(token(C.X_BIO_get_data(b)))
 		C.X_BIO_set_data(b, nil)
 	}
 }
 
-func (b *ReadBio) MarkEOF() {
-	b.data_mtx.Lock()
-	defer b.data_mtx.Unlock()
-	b.eof = true
+func (bio *ReadBio) MarkEOF() {
+	bio.dataMtx.Lock()
+	defer bio.dataMtx.Unlock()
+	bio.eof = true
 }
 
 type anyBio C.BIO
 
 func asAnyBio(b *C.BIO) *anyBio { return (*anyBio)(b) }
 
-func (b *anyBio) Read(buf []byte) (n int, err error) {
+func (bio *anyBio) Read(buf []byte) (int, error) {
 	if len(buf) == 0 {
 		return 0, nil
 	}
-	n = int(C.X_BIO_read((*C.BIO)(b), unsafe.Pointer(&buf[0]), C.int(len(buf))))
+	n := int(C.X_BIO_read((*C.BIO)(bio), unsafe.Pointer(&buf[0]), C.int(len(buf))))
 	if n <= 0 {
 		return 0, io.EOF
 	}
 	return n, nil
 }
 
-func (b *anyBio) Write(buf []byte) (written int, err error) {
+func (bio *anyBio) Write(buf []byte) (int, error) {
 	if len(buf) == 0 {
 		return 0, nil
 	}
-	n := int(C.X_BIO_write((*C.BIO)(b), unsafe.Pointer(&buf[0]),
+	ret := int(C.X_BIO_write((*C.BIO)(bio), unsafe.Pointer(&buf[0]),
 		C.int(len(buf))))
-	if n != len(buf) {
-		return n, errors.New("BIO write failed")
+	if ret < 0 {
+		return 0, fmt.Errorf("BIO write failed: %w", PopError())
 	}
-	return n, nil
+	if ret < len(buf) {
+		return ret, fmt.Errorf("BIO write trucated: %w", ErrPartialWrite)
+	}
+	return ret, nil
 }

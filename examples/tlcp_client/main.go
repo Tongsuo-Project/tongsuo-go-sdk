@@ -46,6 +46,7 @@ func main() {
 	flag.Parse()
 
 	var version ts.SSLVersion
+
 	switch tlsVersion {
 	case "TLSv1.3":
 		version = ts.TLSv1_3
@@ -60,6 +61,7 @@ func main() {
 	default:
 		version = ts.NTLS
 	}
+
 	ctx, err := ts.NewCtxWithVersion(version)
 	if err != nil {
 		panic("NewCtxWithVersion failed: " + err.Error())
@@ -77,11 +79,13 @@ func main() {
 		if err := ctx.SetCipherList(cipherSuites); err != nil {
 			panic(err)
 		}
+
 		if signCertFile != "" {
 			signCertPEM, err := os.ReadFile(signCertFile)
 			if err != nil {
 				panic(err)
 			}
+
 			signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
 			if err != nil {
 				panic(err)
@@ -97,6 +101,7 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
+
 			signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
 			if err != nil {
 				panic(err)
@@ -112,6 +117,7 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
+
 			encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
 			if err != nil {
 				panic(err)
@@ -176,11 +182,13 @@ func main() {
 
 	request := text + "\n"
 	fmt.Println(">>>\n" + request)
+
 	if _, err := conn.Write([]byte(request)); err != nil {
 		panic(err)
 	}
 
 	buffer := make([]byte, 4096)
+
 	n, err := conn.Read(buffer)
 	if err != nil {
 		fmt.Println("read error:", err)

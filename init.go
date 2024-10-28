@@ -24,12 +24,6 @@ package tongsuogo
 // #include "shim.h"
 import "C"
 
-import (
-	"fmt"
-)
-
 func init() {
-	if rc := C.X_tongsuogo_init(); rc != 0 {
-		panic(fmt.Errorf("X_tongsuogo_init failed with %d", rc))
-	}
+	C.X_tongsuogo_init()
 }

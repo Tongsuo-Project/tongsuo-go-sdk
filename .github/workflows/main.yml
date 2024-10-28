@@ -6,7 +6,7 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  build:
+  golang-lint:
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v3
@@ -22,34 +22,74 @@ jobs:
         gofmt-path: './'
         gofmt-flags: '-l -d'
 
+    - name: Go Mod
+      run: go mod tidy
+
     - name: Clone Tongsuo
       uses: actions/checkout@v3
       with:
         repository: Tongsuo-Project/Tongsuo
-        path: tongsuo
+        path: Tongsuo
         ref: 8.3-stable
 
     - name: Build Tongsuo
       run: |
-        cd tongsuo
-        ./config --prefix=/opt/tongsuo --libdir=/opt/tongsuo/lib enable-ntls
+        cd Tongsuo
+        ./config --prefix=${RUNNER_TEMP}/tongsuo --libdir=${RUNNER_TEMP}/tongsuo/lib enable-ntls
         make -j4
         make install
 
-    - name: Go Mod
-      run: go mod tidy
+    - name: Golang lint
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin v1.61.0
+        LD_LIBRARY_PATH=${RUNNER_TEMP}/tongsuo/lib CGO_CFLAGS="-Wall -I${RUNNER_TEMP}/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${RUNNER_TEMP}/tongsuo/lib" golangci-lint run ./...
 
-    - name: Go vet Check
-      run: LD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-Wall -I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go vet ./...
+
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19
+
+    - name: Clone Tongsuo
+      uses: actions/checkout@v3
+      with:
+        repository: Tongsuo-Project/Tongsuo
+        path: Tongsuo
+        ref: 8.3-stable
+
+    - name: Build Tongsuo
+      run: |
+        cd Tongsuo
+        ./config --prefix=${RUNNER_TEMP}/tongsuo --libdir=${RUNNER_TEMP}/tongsuo/lib enable-ntls
+        make -j4
+        make install
 
     - name: Build
-      run: CGO_CFLAGS="-Wall -I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go build
+      run: CGO_CFLAGS="-Wall -I${RUNNER_TEMP}/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${RUNNER_TEMP}/tongsuo/lib" go build
 
-    - name: Test
-      run: LD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-Wall -I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go test ./...
+    - name: Test on Ubuntu
+      run: LD_LIBRARY_PATH=${RUNNER_TEMP}/tongsuo/lib CGO_CFLAGS="-Wall -I${RUNNER_TEMP}/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${RUNNER_TEMP}/tongsuo/lib" go test ./...
+      if: matrix.os == 'ubuntu-latest'
 
-  build_static:
-    runs-on: ubuntu-22.04
+    - name: Test on macOS
+      run: DYLD_LIBRARY_PATH=${RUNNER_TEMP}/tongsuo/lib CGO_CFLAGS="-Wall -I${RUNNER_TEMP}/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${RUNNER_TEMP}/tongsuo/lib" go test ./...
+      if: matrix.os == 'macos-latest'
+
+  build-static:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{matrix.os}}
     steps:
     - uses: actions/checkout@v3
 
@@ -68,9 +108,77 @@ jobs:
     - name: Build Tongsuo Static
       run: |
         cd tongsuo
-        ./config --prefix=/opt/tongsuo --libdir=/opt/tongsuo/lib enable-ntls no-shared
+        ./config --prefix=${RUNNER_TEMP}/tongsuo --libdir=${RUNNER_TEMP}/tongsuo/lib enable-ntls no-shared
         make -j4
         make install
 
-    - name: Test
-      run: LD_LIBRARY_PATH=/opt/tongsuo/lib CGO_CFLAGS="-Wall -I/opt/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L/opt/tongsuo/lib" go test ./...
+    - name: Build
+      run: CGO_CFLAGS="-Wall -I${RUNNER_TEMP}/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${RUNNER_TEMP}/tongsuo/lib" go build
+
+    - name: Test on Ubuntu
+      run: LD_LIBRARY_PATH=${RUNNER_TEMP}/tongsuo/lib CGO_CFLAGS="-Wall -I${RUNNER_TEMP}/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${RUNNER_TEMP}/tongsuo/lib" go test ./...
+      if: matrix.os == 'ubuntu-latest'
+
+    - name: Test on macOS
+      run: DYLD_LIBRARY_PATH=${RUNNER_TEMP}/tongsuo/lib CGO_CFLAGS="-Wall -I${RUNNER_TEMP}/tongsuo/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${RUNNER_TEMP}/tongsuo/lib" go test ./...
+      if: matrix.os == 'macos-latest'
+
+  build-on-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19
+
+    - name: Clone Tongsuo
+      uses: actions/checkout@v3
+      with:
+        repository: Tongsuo-Project/Tongsuo
+        path: Tongsuo
+        ref: 8.3-stable
+    - uses: ilammy/msvc-dev-cmd@v1
+    - uses: ilammy/setup-nasm@v1
+    - uses: shogo82148/actions-setup-perl@v1
+    - name: Build Tongsuo
+      shell: cmd
+      run: |
+        mkdir _build
+        cd _build
+        perl ..\Configure VC-WIN64A no-makedepend --prefix=%RUNNER_TEMP%\tongsuo enable-ntls
+        nmake /S
+        nmake install
+      working-directory: Tongsuo
+
+    - name: Build
+      shell: cmd
+      run: |
+        set CGO_CFLAGS=-Wall -I%RUNNER_TEMP%\tongsuo\include -Wno-deprecated-declarations
+        set CGO_LDFLAGS=-L%RUNNER_TEMP%\tongsuo\lib"
+        go build
+
+    - name: Set PATH for go test runtime library search
+      shell: perl {0}
+      run: |
+        use Actions::Core;
+        add_path("$ENV{RUNNER_TEMP}\\tongsuo\\bin");
+        add_path("$ENV{RUNNER_TEMP}\\tongsuo\\lib");
+
+    - name: Test on Windows
+      shell: cmd
+      run: |
+        copy /y %RUNNER_TEMP%\tongsuo\bin\*.dll "C:\Program Files\MySQL\MySQL Server 8.0\bin"
+        copy /y %RUNNER_TEMP%\tongsuo\bin\*.dll "C:\Program Files\OpenSSL\bin"
+        copy /y %RUNNER_TEMP%\tongsuo\bin\*.dll C:\Windows\system32
+        copy /y %RUNNER_TEMP%\tongsuo\bin\*.dll C:\Strawberry\c\bin
+        copy /y %RUNNER_TEMP%\tongsuo\bin\*.dll "C:\Program Files\Microsoft Service Fabric\bin\Fabric\Fabric.Code"
+        copy /y %RUNNER_TEMP%\tongsuo\bin\*.dll "C:\Program Files\Git\mingw64\bin"
+        copy /y %RUNNER_TEMP%\tongsuo\bin\*.dll c:\tools\php
+        copy /y %RUNNER_TEMP%\tongsuo\bin\*.dll "C:\Program Files\Amazon\AWSCLIV2"
+        set CGO_CFLAGS=-Wall -I%RUNNER_TEMP%\tongsuo\include -Wno-deprecated-declarations
+        set CGO_LDFLAGS=-L%RUNNER_TEMP%\tongsuo\lib
+        go env
+        echo %PATH%
+        go test ./...

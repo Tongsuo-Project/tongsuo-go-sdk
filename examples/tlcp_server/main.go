@@ -59,7 +59,6 @@ func handleConn(conn net.Conn) {
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
-
 		}
 	}(conn)
 
@@ -71,6 +70,7 @@ func handleConn(conn net.Conn) {
 	}
 
 	ntls := conn.(*ts.Conn)
+
 	ver, err := ntls.GetVersion()
 	if err != nil {
 		log.Println("failed get version: ", err)
@@ -98,6 +98,7 @@ func handleConn(conn net.Conn) {
 
 func newTLSServer(acceptAddr string, certKeyPairs map[string]crypto.GMDoubleCertKey, cafile string, alpnProtocols []string, tlsVersion string) (net.Listener, error) {
 	var version ts.SSLVersion
+
 	switch tlsVersion {
 	case "TLSv1.3":
 		version = ts.TLSv1_3
@@ -112,6 +113,7 @@ func newTLSServer(acceptAddr string, certKeyPairs map[string]crypto.GMDoubleCert
 	default:
 		version = ts.TLSv1_3
 	}
+
 	ctx, err := ts.NewCtxWithVersion(version)
 	if err != nil {
 		log.Println(err)
@@ -216,11 +218,13 @@ func loadCertAndKeyForSSL(ssl *ts.SSL, certKeyPair crypto.GMDoubleCertKey) error
 		log.Println(err)
 		return err
 	}
+
 	encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+
 	err = ctx.UseEncryptCertificate(encCert)
 	if err != nil {
 		return err
@@ -231,11 +235,13 @@ func loadCertAndKeyForSSL(ssl *ts.SSL, certKeyPair crypto.GMDoubleCertKey) error
 		log.Println(err)
 		return err
 	}
+
 	signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+
 	err = ctx.UseSignCertificate(signCert)
 	if err != nil {
 		return err
@@ -246,11 +252,13 @@ func loadCertAndKeyForSSL(ssl *ts.SSL, certKeyPair crypto.GMDoubleCertKey) error
 		log.Println(err)
 		return err
 	}
+
 	encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+
 	err = ctx.UseEncryptPrivateKey(encKey)
 	if err != nil {
 		return err
@@ -261,11 +269,13 @@ func loadCertAndKeyForSSL(ssl *ts.SSL, certKeyPair crypto.GMDoubleCertKey) error
 		log.Println(err)
 		return err
 	}
+
 	signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+
 	err = ctx.UseSignPrivateKey(signKey)
 	if err != nil {
 		return err
@@ -283,11 +293,13 @@ func loadCertAndKey(ctx *ts.Ctx, pair crypto.GMDoubleCertKey) (err error) {
 		log.Println(err)
 		return err
 	}
+
 	encCert, err := crypto.LoadCertificateFromPEM(encCertPEM)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+
 	err = ctx.UseEncryptCertificate(encCert)
 	if err != nil {
 		return err
@@ -298,11 +310,13 @@ func loadCertAndKey(ctx *ts.Ctx, pair crypto.GMDoubleCertKey) (err error) {
 		log.Println(err)
 		return err
 	}
+
 	signCert, err := crypto.LoadCertificateFromPEM(signCertPEM)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+
 	err = ctx.UseSignCertificate(signCert)
 	if err != nil {
 		return err
@@ -313,11 +327,13 @@ func loadCertAndKey(ctx *ts.Ctx, pair crypto.GMDoubleCertKey) (err error) {
 		log.Println(err)
 		return err
 	}
+
 	encKey, err := crypto.LoadPrivateKeyFromPEM(encKeyPEM)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+
 	err = ctx.UseEncryptPrivateKey(encKey)
 	if err != nil {
 		return err
@@ -328,18 +344,19 @@ func loadCertAndKey(ctx *ts.Ctx, pair crypto.GMDoubleCertKey) (err error) {
 		log.Println(err)
 		return err
 	}
+
 	signKey, err := crypto.LoadPrivateKeyFromPEM(signKeyPEM)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+
 	err = ctx.UseSignPrivateKey(signKey)
 	if err != nil {
 		return err
 	}
 
 	return nil
-
 }
 
 func main() {

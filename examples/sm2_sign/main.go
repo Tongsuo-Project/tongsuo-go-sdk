@@ -35,6 +35,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Printf("SM2withSM3(%s)=(r, s)=(%s, %s)\n", data, hex.EncodeToString(r.Bytes()), hex.EncodeToString(s.Bytes()))
 
 	pub := priv.Public()

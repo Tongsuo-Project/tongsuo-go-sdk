@@ -15,14 +15,10 @@
 package md5
 
 // #include "../shim.h"
-// #cgo linux LDFLAGS: -lcrypto
-// #cgo darwin LDFLAGS: -lcrypto
-// #cgo windows CFLAGS: -DWIN32_LEAN_AND_MEAN
-// #cgo windows pkg-config: libcrypto
 import "C"
 
 import (
-	"errors"
+	"fmt"
 	"hash"
 	"runtime"
 	"unsafe"
@@ -31,8 +27,8 @@ import (
 )
 
 const (
-	MD5_DIGEST_LENGTH = 16
-	MD5_CBLOCK        = 64
+	MDSize    = 16
+	md5Cblock = 64
 )
 
 var _ hash.Hash = new(MD5)
@@ -45,30 +41,34 @@ type MD5 struct {
 func New() (*MD5, error) { return NewWithEngine(nil) }
 
 func NewWithEngine(e *crypto.Engine) (*MD5, error) {
-	h, err := newMD5WithEngine(e)
+	hash, err := newMD5WithEngine(e)
 	if err != nil {
 		return nil, err
 	}
-	h.Reset()
-	return h, nil
+
+	hash.Reset()
+
+	return hash, nil
 }
 
 func newMD5WithEngine(e *crypto.Engine) (*MD5, error) {
-	hash := &MD5{engine: e}
+	hash := &MD5{ctx: nil, engine: e}
 	hash.ctx = C.X_EVP_MD_CTX_new()
 	if hash.ctx == nil {
-		return nil, errors.New("openssl: md5: unable to allocate ctx")
+		return nil, fmt.Errorf("failed to create md ctx: %w", crypto.ErrMallocFailure)
 	}
+
 	runtime.SetFinalizer(hash, func(hash *MD5) { hash.Close() })
+
 	return hash, nil
 }
 
 func (s *MD5) BlockSize() int {
-	return MD5_CBLOCK
+	return md5Cblock
 }
 
 func (s *MD5) Size() int {
-	return MD5_DIGEST_LENGTH
+	return MDSize
 }
 
 func (s *MD5) Close() {
@@ -82,14 +82,16 @@ func (s *MD5) Reset() {
 	C.X_EVP_DigestInit_ex(s.ctx, C.X_EVP_md5(), (*C.ENGINE)(s.engine.Engine()))
 }
 
-func (s *MD5) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
+func (s *MD5) Write(data []byte) (int, error) {
+	if len(data) == 0 {
 		return 0, nil
 	}
-	if 1 != C.X_EVP_DigestUpdate(s.ctx, unsafe.Pointer(&p[0]), C.size_t(len(p))) {
-		return 0, errors.New("openssl: md5: cannot update digest")
+
+	if C.X_EVP_DigestUpdate(s.ctx, unsafe.Pointer(&data[0]), C.size_t(len(data))) != 1 {
+		return 0, fmt.Errorf("failed to update digest: %w", crypto.PopError())
 	}
-	return len(p), nil
+
+	return len(data), nil
 }
 
 func (s *MD5) Sum(in []byte) []byte {
@@ -106,19 +108,19 @@ func (s *MD5) Sum(in []byte) []byte {
 	return append(in, result[:]...)
 }
 
-func (s *MD5) checkSum() (result [MD5_DIGEST_LENGTH]byte) {
+func (s *MD5) checkSum() [MDSize]byte {
+	var result [MDSize]byte
+
 	C.X_EVP_DigestFinal_ex(s.ctx, (*C.uchar)(unsafe.Pointer(&result[0])), nil)
+
 	return result
 }
 
-func Sum(data []byte) (result [MD5_DIGEST_LENGTH]byte) {
-	C.X_EVP_Digest(
-		unsafe.Pointer(&data[0]),
-		C.size_t(len(data)),
-		(*C.uchar)(unsafe.Pointer(&result[0])),
-		nil,
-		C.X_EVP_md5(),
-		nil,
-	)
-	return
+func Sum(data []byte) [MDSize]byte {
+	var result [MDSize]byte
+
+	C.X_EVP_Digest(unsafe.Pointer(&data[0]), C.size_t(len(data)), (*C.uchar)(unsafe.Pointer(&result[0])), nil,
+		C.X_EVP_md5(), nil)
+
+	return result
 }

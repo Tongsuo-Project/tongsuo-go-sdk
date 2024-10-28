@@ -18,24 +18,23 @@ package crypto
 import "C"
 
 import (
-	"errors"
 	"fmt"
 	"runtime"
 	"unsafe"
 )
 
 const (
-	GCM_TAG_MAXLEN = 16
+	GCMTagMaxLen = 16
 )
 
 const (
-	CIPHER_MODE_ECB = 1
-	CIPHER_MODE_CBC = 2
-	CIPHER_MODE_CFB = 3
-	CIPHER_MODE_OFB = 4
-	CIPHER_MODE_CTR = 5
-	CIPHER_MODE_GCM = 6
-	CIPHER_MODE_CCM = 7
+	CipherModeECB = 1
+	CipherModeCBC = 2
+	CipherModeCFB = 3
+	CipherModeOFB = 4
+	CipherModeCTR = 5
+	CipherModeGCM = 6
+	CipherModeCCM = 7
 )
 
 type CipherCtx interface {
@@ -83,7 +82,7 @@ func (c *Cipher) IVSize() int {
 func Nid2ShortName(nid NID) (string, error) {
 	sn := C.OBJ_nid2sn(C.int(nid))
 	if sn == nil {
-		return "", fmt.Errorf("NID %d not found", nid)
+		return "", PopError()
 	}
 	return C.GoString(sn), nil
 }
@@ -93,7 +92,7 @@ func GetCipherByName(name string) (*Cipher, error) {
 	defer C.free(unsafe.Pointer(cname))
 	p := C.EVP_get_cipherbyname(cname)
 	if p == nil {
-		return nil, fmt.Errorf("Cipher %v not found", name)
+		return nil, ErrCipherNotFound
 	}
 	// we can consider ciphers to use static mem; don't need to free
 	return &Cipher{ptr: p}, nil
@@ -114,7 +113,7 @@ type cipherCtx struct {
 func newCipherCtx() (*cipherCtx, error) {
 	cctx := C.EVP_CIPHER_CTX_new()
 	if cctx == nil {
-		return nil, errors.New("failed to allocate cipher context")
+		return nil, ErrMallocFailure
 	}
 	ctx := &cipherCtx{cctx}
 	runtime.SetFinalizer(ctx, func(ctx *cipherCtx) {
@@ -127,15 +126,15 @@ func (ctx *cipherCtx) SetKeyAndIV(key, iv []byte) error {
 	var kptr, iptr *C.uchar
 	if key != nil {
 		if len(key) != ctx.KeySize() {
-			return fmt.Errorf("bad key size (%d bytes instead of %d)",
-				len(key), ctx.KeySize())
+			return fmt.Errorf("bad key size (%d bytes instead of %d): %w",
+				len(key), ctx.KeySize(), ErrBadKeySize)
 		}
 		kptr = (*C.uchar)(&key[0])
 	}
 	if iv != nil {
 		if len(iv) != ctx.IVSize() {
-			return fmt.Errorf("bad IV size (%d bytes instead of %d)",
-				len(iv), ctx.IVSize())
+			return fmt.Errorf("bad IV size (%d bytes instead of %d): %w",
+				len(iv), ctx.IVSize(), ErrBadIvSize)
 		}
 		iptr = (*C.uchar)(&iv[0])
 	}
@@ -146,8 +145,8 @@ func (ctx *cipherCtx) SetKeyAndIV(key, iv []byte) error {
 		} else {
 			res = C.EVP_DecryptInit_ex(ctx.ctx, nil, nil, kptr, iptr)
 		}
-		if 1 != res {
-			return errors.New("failed to apply key/IV")
+		if res != 1 {
+			return PopError()
 		}
 	}
 	return nil
@@ -184,8 +183,8 @@ func (ctx *cipherCtx) SetPadding(pad bool) {
 func (ctx *cipherCtx) SetCtrl(code, arg int) error {
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg), nil)
 	if res != 1 {
-		return fmt.Errorf("failed to set code %d to %d [result %d]",
-			code, arg, res)
+		return fmt.Errorf("failed to set code %d to %d [result %d]: %w",
+			code, arg, res, PopError())
 	}
 	return nil
 }
@@ -194,8 +193,8 @@ func (ctx *cipherCtx) SetCtrlBytes(code, arg int, value []byte) error {
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg),
 		unsafe.Pointer(&value[0]))
 	if res != 1 {
-		return fmt.Errorf("failed to set code %d with arg %d to %x [result %d]",
-			code, arg, value, res)
+		return fmt.Errorf("failed to set code %d with arg %d to %x [result %d]: %w",
+			code, arg, value, res, PopError())
 	}
 	return nil
 }
@@ -205,8 +204,8 @@ func (ctx *cipherCtx) GetCtrlInt(code, arg int) (int, error) {
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg),
 		unsafe.Pointer(&returnVal))
 	if res != 1 {
-		return 0, fmt.Errorf("failed to get code %d with arg %d [result %d]",
-			code, arg, res)
+		return 0, fmt.Errorf("failed to get code %d with arg %d [result %d]: %w",
+			code, arg, res, PopError())
 	}
 	return int(returnVal), nil
 }
@@ -216,8 +215,8 @@ func (ctx *cipherCtx) GetCtrlBytes(code, arg, expectsize int) ([]byte, error) {
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg),
 		unsafe.Pointer(&returnVal[0]))
 	if res != 1 {
-		return nil, fmt.Errorf("failed to get code %d with arg %d [result %d]",
-			code, arg, res)
+		return nil, fmt.Errorf("failed to get code %d with arg %d [result %d]: %w",
+			code, arg, res, PopError())
 	}
 	return returnVal, nil
 }
@@ -255,10 +254,11 @@ type decryptionCipherCtx struct {
 	*cipherCtx
 }
 
-func newEncryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
-	*encryptionCipherCtx, error) {
-	if c == nil {
-		return nil, errors.New("null cipher not allowed")
+func newEncryptionCipherCtx(cipher *Cipher, e *Engine, key, iv []byte) (
+	*encryptionCipherCtx, error,
+) {
+	if cipher == nil {
+		return nil, ErrNilParameter
 	}
 	ctx, err := newCipherCtx()
 	if err != nil {
@@ -266,10 +266,10 @@ func newEncryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
 	}
 	var eptr *C.ENGINE
 	if e != nil {
-		eptr = (*C.ENGINE)(e.Engine())
+		eptr = e.Engine()
 	}
-	if 1 != C.EVP_EncryptInit_ex(ctx.ctx, c.ptr, eptr, nil, nil) {
-		return nil, errors.New("failed to initialize cipher context")
+	if C.EVP_EncryptInit_ex(ctx.ctx, cipher.ptr, eptr, nil, nil) != 1 {
+		return nil, PopError()
 	}
 	err = ctx.SetKeyAndIV(key, iv)
 	if err != nil {
@@ -278,10 +278,11 @@ func newEncryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
 	return &encryptionCipherCtx{cipherCtx: ctx}, nil
 }
 
-func newDecryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
-	*decryptionCipherCtx, error) {
-	if c == nil {
-		return nil, errors.New("null cipher not allowed")
+func newDecryptionCipherCtx(cipher *Cipher, e *Engine, key, iv []byte) (
+	*decryptionCipherCtx, error,
+) {
+	if cipher == nil {
+		return nil, ErrNilParameter
 	}
 	ctx, err := newCipherCtx()
 	if err != nil {
@@ -289,10 +290,10 @@ func newDecryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
 	}
 	var eptr *C.ENGINE
 	if e != nil {
-		eptr = (*C.ENGINE)(e.Engine())
+		eptr = e.Engine()
 	}
-	if 1 != C.EVP_DecryptInit_ex(ctx.ctx, c.ptr, eptr, nil, nil) {
-		return nil, errors.New("failed to initialize cipher context")
+	if C.EVP_DecryptInit_ex(ctx.ctx, cipher.ptr, eptr, nil, nil) != 1 {
+		return nil, PopError()
 	}
 	err = ctx.SetKeyAndIV(key, iv)
 	if err != nil {
@@ -302,12 +303,14 @@ func newDecryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
 }
 
 func NewEncryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
-	EncryptionCipherCtx, error) {
+	EncryptionCipherCtx, error,
+) {
 	return newEncryptionCipherCtx(c, e, key, iv)
 }
 
 func NewDecryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
-	DecryptionCipherCtx, error) {
+	DecryptionCipherCtx, error,
+) {
 	return newDecryptionCipherCtx(c, e, key, iv)
 }
 
@@ -320,7 +323,7 @@ func (ctx *encryptionCipherCtx) EncryptUpdate(input []byte) ([]byte, error) {
 	res := C.EVP_EncryptUpdate(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen,
 		(*C.uchar)(&input[0]), C.int(len(input)))
 	if res != 1 {
-		return nil, fmt.Errorf("failed to encrypt [result %d]", res)
+		return nil, fmt.Errorf("failed to encrypt [result %d]: %w", res, PopError())
 	}
 	return outbuf[:outlen], nil
 }
@@ -334,7 +337,7 @@ func (ctx *decryptionCipherCtx) DecryptUpdate(input []byte) ([]byte, error) {
 	res := C.EVP_DecryptUpdate(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen,
 		(*C.uchar)(&input[0]), C.int(len(input)))
 	if res != 1 {
-		return nil, fmt.Errorf("failed to decrypt [result %d]", res)
+		return nil, fmt.Errorf("failed to decrypt [result %d]: %w", res, PopError())
 	}
 	return outbuf[:outlen], nil
 }
@@ -342,8 +345,8 @@ func (ctx *decryptionCipherCtx) DecryptUpdate(input []byte) ([]byte, error) {
 func (ctx *encryptionCipherCtx) EncryptFinal() ([]byte, error) {
 	outbuf := make([]byte, ctx.BlockSize())
 	var outlen C.int
-	if 1 != C.EVP_EncryptFinal_ex(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen) {
-		return nil, errors.New("encryption failed")
+	if C.EVP_EncryptFinal_ex(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen) != 1 {
+		return nil, fmt.Errorf("encryption failed: %w", PopError())
 	}
 	return outbuf[:outlen], nil
 }
@@ -351,10 +354,10 @@ func (ctx *encryptionCipherCtx) EncryptFinal() ([]byte, error) {
 func (ctx *decryptionCipherCtx) DecryptFinal() ([]byte, error) {
 	outbuf := make([]byte, ctx.BlockSize())
 	var outlen C.int
-	if 1 != C.EVP_DecryptFinal_ex(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen) {
+	if C.EVP_DecryptFinal_ex(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen) != 1 {
 		// this may mean the tag failed to verify- all previous plaintext
 		// returned must be considered faked and invalid
-		return nil, errors.New("decryption failed")
+		return nil, fmt.Errorf("decryption failed: %w", PopError())
 	}
 	return outbuf[:outlen], nil
 }

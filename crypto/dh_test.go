@@ -12,35 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package crypto
+package crypto_test
 
 import (
 	"bytes"
 	"testing"
+
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 func TestECDH(t *testing.T) {
 	t.Parallel()
 
-	myKey, err := GenerateECKey(Prime256v1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	peerKey, err := GenerateECKey(Prime256v1)
+	myKey, err := crypto.GenerateECKey(crypto.Prime256v1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	mySecret, err := DeriveSharedSecret(myKey, peerKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	theirSecret, err := DeriveSharedSecret(peerKey, myKey)
+	peerKey, err := crypto.GenerateECKey(crypto.Prime256v1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if bytes.Compare(mySecret, theirSecret) != 0 {
+	mySecret, err := crypto.DeriveSharedSecret(myKey, peerKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	theirSecret, err := crypto.DeriveSharedSecret(peerKey, myKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(mySecret, theirSecret) {
 		t.Fatal("shared secrets are different")
 	}
 }

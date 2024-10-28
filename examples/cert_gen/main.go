@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"math/big"
 	"path/filepath"
 	"time"
+
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 const genPath = "./examples/cert_gen/"
@@ -12,18 +13,21 @@ const genPath = "./examples/cert_gen/"
 func main() {
 	// Helper function: generate and save key
 	generateAndSaveKey := func(filename string) crypto.PrivateKey {
-		key, err := crypto.GenerateECKey(crypto.Sm2Curve)
+		key, err := crypto.GenerateECKey(crypto.SM2Curve)
 		if err != nil {
 			panic(err)
 		}
+
 		pem, err := key.MarshalPKCS8PrivateKeyPEM()
 		if err != nil {
 			panic(err)
 		}
+
 		err = crypto.SavePEMToFile(pem, filename)
 		if err != nil {
 			panic(err)
 		}
+
 		return key
 	}
 
@@ -33,23 +37,27 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+
 		err = cert.AddExtensions(extensions)
 		if err != nil {
 			panic(err)
 		}
+
 		return cert
 	}
 
 	// Helper function: sign and save certificate
 	signAndSaveCert := func(cert *crypto.Certificate, caKey crypto.PrivateKey, filename string) {
-		err := cert.Sign(caKey, crypto.EVP_SM3)
+		err := cert.Sign(caKey, crypto.MDSM3)
 		if err != nil {
 			panic(err)
 		}
+
 		certPem, err := cert.MarshalPEM()
 		if err != nil {
 			panic(err)
 		}
+
 		err = crypto.SavePEMToFile(certPem, filename)
 		if err != nil {
 			panic(err)
@@ -57,10 +65,11 @@ func main() {
 	}
 
 	// Create CA certificate
-	caKey, err := crypto.GenerateECKey(crypto.Sm2Curve)
+	caKey, err := crypto.GenerateECKey(crypto.SM2Curve)
 	if err != nil {
 		panic(err)
 	}
+
 	caInfo := crypto.CertificateInfo{
 		Serial:       big.NewInt(1),
 		Expires:      87600 * time.Hour, // 10 years
@@ -69,10 +78,10 @@ func main() {
 		CommonName:   "CA",
 	}
 	caExtensions := map[crypto.NID]string{
-		crypto.NID_basic_constraints:        "critical,CA:TRUE",
-		crypto.NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
-		crypto.NID_subject_key_identifier:   "hash",
-		crypto.NID_authority_key_identifier: "keyid:always,issuer",
+		crypto.NidBasicConstraints:       "critical,CA:TRUE",
+		crypto.NidKeyUsage:               "critical,digitalSignature,keyCertSign,cRLSign",
+		crypto.NidSubjectKeyIdentifier:   "hash",
+		crypto.NidAuthorityKeyIdentifier: "keyid:always,issuer",
 	}
 	ca := createCertificate(caInfo, caKey, caExtensions)
 	caFile := filepath.Join(genPath, "chain-ca.crt")
@@ -102,8 +111,8 @@ func main() {
 			CommonName:   "localhost",
 		}
 		extensions := map[crypto.NID]string{
-			crypto.NID_basic_constraints: "critical,CA:FALSE",
-			crypto.NID_key_usage:         info.keyUsage,
+			crypto.NidBasicConstraints: "critical,CA:FALSE",
+			crypto.NidKeyUsage:         info.keyUsage,
 		}
 		cert := createCertificate(certInfo, key, extensions)
 
@@ -111,6 +120,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+
 		certFile := filepath.Join(genPath, info.name+".crt")
 		signAndSaveCert(cert, caKey, certFile)
 	}

@@ -23,6 +23,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Printf("Private Key:\n%s\n", pem)
 
 	pub := priv.Public()

@@ -24,6 +24,7 @@ Wt3Te/d/8Mr57Tf886i09VwDhSMmH8pmNq/mp6+ioUgqYG9cs6GLLioe
 
 func main() {
 	data := []byte("hello world")
+
 	priv, err := crypto.LoadPrivateKeyFromPEM(sm2_key1)
 	if err != nil {
 		panic(err)
@@ -34,6 +35,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Printf("SM2withSM3(%s)=%s\n", data, hex.EncodeToString(signature))
 
 	pub := priv.Public()

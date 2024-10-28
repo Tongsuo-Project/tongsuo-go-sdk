@@ -15,14 +15,10 @@
 package sha256
 
 // #include "../shim.h"
-// #cgo linux LDFLAGS: -lcrypto
-// #cgo darwin LDFLAGS: -lcrypto
-// #cgo windows CFLAGS: -DWIN32_LEAN_AND_MEAN
-// #cgo windows pkg-config: libcrypto
 import "C"
 
 import (
-	"errors"
+	"fmt"
 	"runtime"
 	"unsafe"
 
@@ -37,15 +33,16 @@ type SHA256 struct {
 func New() (*SHA256, error) { return NewWithEngine(nil) }
 
 func NewWithEngine(e *crypto.Engine) (*SHA256, error) {
-	hash := &SHA256{engine: e}
+	hash := &SHA256{ctx: nil, engine: e}
 	hash.ctx = C.X_EVP_MD_CTX_new()
 	if hash.ctx == nil {
-		return nil, errors.New("openssl: sha256: unable to allocate ctx")
+		return nil, fmt.Errorf("failed to create md ctx %w", crypto.ErrMallocFailure)
 	}
 	runtime.SetFinalizer(hash, func(hash *SHA256) { hash.Close() })
 	if err := hash.Reset(); err != nil {
 		return nil, err
 	}
+
 	return hash, nil
 }
 
@@ -57,39 +54,45 @@ func (s *SHA256) Close() {
 }
 
 func (s *SHA256) Reset() error {
-	if 1 != C.X_EVP_DigestInit_ex(s.ctx, C.X_EVP_sha256(), (*C.ENGINE)(s.engine.Engine())) {
-		return errors.New("openssl: sha256: cannot init digest ctx")
+	if C.X_EVP_DigestInit_ex(s.ctx, C.X_EVP_sha256(), (*C.ENGINE)(s.engine.Engine())) != 1 {
+		return fmt.Errorf("failed to init digest ctx: %w", crypto.PopError())
 	}
+
 	return nil
 }
 
-func (s *SHA256) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
+func (s *SHA256) Write(data []byte) (int, error) {
+	if len(data) == 0 {
 		return 0, nil
 	}
-	if 1 != C.X_EVP_DigestUpdate(s.ctx, unsafe.Pointer(&p[0]),
-		C.size_t(len(p))) {
-		return 0, errors.New("openssl: sha256: cannot update digest")
+	if C.X_EVP_DigestUpdate(s.ctx, unsafe.Pointer(&data[0]), C.size_t(len(data))) != 1 {
+		return 0, fmt.Errorf("failed to update digest: %w", crypto.PopError())
 	}
-	return len(p), nil
+
+	return len(data), nil
 }
 
-func (s *SHA256) Sum() (result [32]byte, err error) {
-	if 1 != C.X_EVP_DigestFinal_ex(s.ctx,
-		(*C.uchar)(unsafe.Pointer(&result[0])), nil) {
-		return result, errors.New("openssl: sha256: cannot finalize ctx")
+func (s *SHA256) Sum() ([32]byte, error) {
+	var result [32]byte
+
+	if C.X_EVP_DigestFinal_ex(s.ctx, (*C.uchar)(unsafe.Pointer(&result[0])), nil) != 1 {
+		return result, fmt.Errorf("failed to finalize digest: %w", crypto.PopError())
 	}
+
 	return result, s.Reset()
 }
 
-func Sum(data []byte) (result [32]byte, err error) {
+func Sum(data []byte) ([32]byte, error) {
 	hash, err := New()
 	if err != nil {
-		return result, err
+		return [32]byte{}, err
 	}
+
 	defer hash.Close()
+
 	if _, err := hash.Write(data); err != nil {
-		return result, err
+		return [32]byte{}, err
 	}
+
 	return hash.Sum()
 }

@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sha256
+package sha256_test
 
 import (
 	"crypto/rand"
 	"crypto/sha256"
 	"io"
 	"testing"
+
+	tsSHA256 "github.com/tongsuo-project/tongsuo-go-sdk/crypto/sha256"
 )
 
 func Test(t *testing.T) {
+	t.Parallel()
+
 	for i := 0; i < 100; i++ {
 		buf := make([]byte, 10*1024-i)
 		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
@@ -29,7 +33,8 @@ func Test(t *testing.T) {
 		}
 
 		expected := sha256.Sum256(buf)
-		got, err := Sum(buf)
+
+		got, err := tsSHA256.Sum(buf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -41,17 +46,22 @@ func Test(t *testing.T) {
 }
 
 func TestWriter(t *testing.T) {
-	ohash, err := New()
+	t.Parallel()
+
+	ohash, err := tsSHA256.New()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	hash := sha256.New()
 
 	for i := 0; i < 100; i++ {
 		if err := ohash.Reset(); err != nil {
 			t.Fatal(err)
 		}
+
 		hash.Reset()
+
 		buf := make([]byte, 10*1024-i)
 		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
 			t.Fatal(err)
@@ -60,6 +70,7 @@ func TestWriter(t *testing.T) {
 		if _, err := ohash.Write(buf); err != nil {
 			t.Fatal(err)
 		}
+
 		if _, err := hash.Write(buf); err != nil {
 			t.Fatal(err)
 		}
@@ -67,6 +78,7 @@ func TestWriter(t *testing.T) {
 		var got, exp [32]byte
 
 		hash.Sum(exp[:0])
+
 		got, err := ohash.Sum()
 		if err != nil {
 			t.Fatal(err)
@@ -79,19 +91,23 @@ func TestWriter(t *testing.T) {
 }
 
 func benchmark(b *testing.B, length int64, fn func([]byte)) {
+	b.Helper()
+
 	buf := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, buf); err != nil {
 		b.Fatal(err)
 	}
+
 	b.SetBytes(length)
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		fn(buf)
 	}
 }
 
 func BenchmarkLarge_openssl(b *testing.B) {
-	benchmark(b, 1024*1024, func(buf []byte) { Sum(buf) })
+	benchmark(b, 1024*1024, func(buf []byte) { _, _ = tsSHA256.Sum(buf) })
 }
 
 func BenchmarkLarge_stdlib(b *testing.B) {
@@ -99,7 +115,7 @@ func BenchmarkLarge_stdlib(b *testing.B) {
 }
 
 func BenchmarkSmall_openssl(b *testing.B) {
-	benchmark(b, 1, func(buf []byte) { Sum(buf) })
+	benchmark(b, 1, func(buf []byte) { _, _ = tsSHA256.Sum(buf) })
 }
 
 func BenchmarkSmall_stdlib(b *testing.B) {

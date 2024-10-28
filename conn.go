@@ -32,22 +32,22 @@ import (
 )
 
 var (
-	zeroReturn = errors.New("zero return")
-	wantRead   = errors.New("want read")
-	wantWrite  = errors.New("want write")
-	tryAgain   = errors.New("try again")
+	errZeroReturn = errors.New("zero return")
+	errWantRead   = errors.New("want read")
+	errWantWrite  = errors.New("want write")
+	errTryAgain   = errors.New("try again")
 )
 
 type Conn struct {
 	*SSL
 
-	conn             net.Conn
-	ctx              *Ctx // for gc
-	into_ssl         *crypto.ReadBio
-	from_ssl         *crypto.WriteBio
-	is_shutdown      bool
-	mtx              sync.Mutex
-	want_read_future *utils.Future
+	conn           net.Conn
+	ctx            *Ctx // for gc
+	intoSSL        *crypto.ReadBio
+	fromSSL        *crypto.WriteBio
+	isShutdown     bool
+	mtx            sync.Mutex
+	wantReadFuture *utils.Future
 }
 
 type VerifyResult int
@@ -105,8 +105,9 @@ func newSSL(ctx *C.SSL_CTX) (*C.SSL, error) {
 	defer runtime.UnlockOSThread()
 	ssl := C.SSL_new(ctx)
 	if ssl == nil {
-		return nil, crypto.ErrorFromErrorQueue()
+		return nil, fmt.Errorf("failed to create SSL: %w", crypto.PopError())
 	}
+
 	return ssl, nil
 }
 
@@ -116,43 +117,44 @@ func newConn(conn net.Conn, ctx *Ctx) (*Conn, error) {
 		return nil, err
 	}
 
-	into_ssl := &crypto.ReadBio{}
-	from_ssl := &crypto.WriteBio{}
+	intoSSL := &crypto.ReadBio{}
+	fromSSL := &crypto.WriteBio{}
 
 	if ctx.GetMode()&ReleaseBuffers > 0 {
-		into_ssl.SetRelease(true)
-		from_ssl.SetRelease(true)
+		intoSSL.SetRelease(true)
+		fromSSL.SetRelease(true)
 	}
 
-	into_ssl_cbio := into_ssl.MakeCBIO()
-	from_ssl_cbio := from_ssl.MakeCBIO()
-	if into_ssl_cbio == nil || from_ssl_cbio == nil {
+	intoSSLCbio := intoSSL.MakeCBIO()
+	fromSSLCbio := fromSSL.MakeCBIO()
+	if intoSSLCbio == nil || fromSSLCbio == nil {
 		// these frees are null safe
-		C.BIO_free((*C.BIO)(into_ssl_cbio))
-		C.BIO_free((*C.BIO)(from_ssl_cbio))
+		C.BIO_free((*C.BIO)(intoSSLCbio))
+		C.BIO_free((*C.BIO)(fromSSLCbio))
 		C.SSL_free(ssl)
-		return nil, errors.New("failed to allocate memory BIO")
+		return nil, fmt.Errorf("failed to allocate memory BIO: %w", crypto.ErrMallocFailure)
 	}
 
 	// the ssl object takes ownership of these objects now
-	C.SSL_set_bio(ssl, (*C.BIO)(into_ssl_cbio), (*C.BIO)(from_ssl_cbio))
+	C.SSL_set_bio(ssl, (*C.BIO)(intoSSLCbio), (*C.BIO)(fromSSLCbio))
 
 	s := &SSL{ssl: ssl}
 	C.SSL_set_ex_data(s.ssl, get_ssl_idx(), unsafe.Pointer(s.ssl))
 
-	c := &Conn{
-		SSL: s,
-
-		conn:     conn,
-		ctx:      ctx,
-		into_ssl: into_ssl,
-		from_ssl: from_ssl}
-	runtime.SetFinalizer(c, func(c *Conn) {
-		c.into_ssl.Disconnect(into_ssl_cbio)
-		c.from_ssl.Disconnect(from_ssl_cbio)
+	con := &Conn{
+		SSL:     s,
+		conn:    conn,
+		ctx:     ctx,
+		intoSSL: intoSSL,
+		fromSSL: fromSSL,
+	}
+	runtime.SetFinalizer(con, func(c *Conn) {
+		c.intoSSL.Disconnect(intoSSLCbio)
+		c.fromSSL.Disconnect(fromSSLCbio)
 		C.SSL_free(c.ssl)
 	})
-	return c, nil
+
+	return con, nil
 }
 
 // Client wraps an existing stream connection and puts it in the connect state
@@ -193,7 +195,7 @@ func (c *Conn) GetCtx() *Ctx { return c.ctx }
 func (c *Conn) CurrentCipher() (string, error) {
 	p := C.X_SSL_get_cipher_name(c.ssl)
 	if p == nil {
-		return "", errors.New("Session not established")
+		return "", fmt.Errorf("failed to get cipher: %w", crypto.ErrNoCipher)
 	}
 
 	return C.GoString(p), nil
@@ -202,7 +204,7 @@ func (c *Conn) CurrentCipher() (string, error) {
 func (c *Conn) GetVersion() (string, error) {
 	p := C.X_SSL_get_version(c.ssl)
 	if p == nil {
-		return "", errors.New("Failed to get version")
+		return "", fmt.Errorf("failed to get version: %w", crypto.ErrNoVersion)
 	}
 
 	return C.GoString(p), nil
@@ -210,21 +212,31 @@ func (c *Conn) GetVersion() (string, error) {
 
 func (c *Conn) fillInputBuffer() error {
 	for {
-		n, err := c.into_ssl.ReadFromOnce(c.conn)
+		n, err := c.intoSSL.ReadFromOnce(c.conn)
 		if n == 0 && err == nil {
 			continue
 		}
-		if err == io.EOF {
-			c.into_ssl.MarkEOF()
+
+		if errors.Is(err, io.EOF) {
+			c.intoSSL.MarkEOF()
 			return c.Close()
 		}
-		return err
+
+		if err != nil {
+			return fmt.Errorf("failed to read from connection: %w", err)
+		}
+
+		return nil
 	}
 }
 
 func (c *Conn) flushOutputBuffer() error {
-	_, err := c.from_ssl.WriteTo(c.conn)
-	return err
+	_, err := c.fromSSL.WriteTo(c.conn)
+	if err != nil {
+		return fmt.Errorf("failed to write to connection: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Conn) getErrorHandler(rv C.int, errno error) func() error {
@@ -237,27 +249,35 @@ func (c *Conn) getErrorHandler(rv C.int, errno error) func() error {
 		}
 	case C.SSL_ERROR_WANT_READ:
 		go c.flushOutputBuffer()
-		if c.want_read_future != nil {
-			want_read_future := c.want_read_future
+		if c.wantReadFuture != nil {
+			wantReadFuture := c.wantReadFuture
 			return func() error {
-				_, err := want_read_future.Get()
-				return err
+				_, err := wantReadFuture.Get()
+				if err != nil {
+					return fmt.Errorf("want read future get error: %w", err)
+				}
+				return nil
 			}
 		}
-		c.want_read_future = utils.NewFuture()
-		want_read_future := c.want_read_future
-		return func() (err error) {
+		c.wantReadFuture = utils.NewFuture()
+		wantReadFuture := c.wantReadFuture
+		return func() error {
+			var err error
+
 			defer func() {
 				c.mtx.Lock()
-				c.want_read_future = nil
+				c.wantReadFuture = nil
 				c.mtx.Unlock()
-				want_read_future.Set(nil, err)
+				wantReadFuture.Set(nil, err)
 			}()
+
 			err = c.fillInputBuffer()
 			if err != nil {
 				return err
 			}
-			return tryAgain
+
+			err = errTryAgain
+			return err
 		}
 	case C.SSL_ERROR_WANT_WRITE:
 		return func() error {
@@ -265,26 +285,26 @@ func (c *Conn) getErrorHandler(rv C.int, errno error) func() error {
 			if err != nil {
 				return err
 			}
-			return tryAgain
+			return errTryAgain
 		}
 	case C.SSL_ERROR_SYSCALL:
 		var err error
 		if C.ERR_peek_error() == 0 {
 			switch rv {
 			case 0:
-				err = errors.New("protocol-violating EOF")
+				err = fmt.Errorf("protocol-violating: %w", crypto.ErrUnexpectedEOF)
 			case -1:
 				err = errno
 			default:
-				err = crypto.ErrorFromErrorQueue()
+				err = crypto.PopError()
 			}
 		} else {
-			err = crypto.ErrorFromErrorQueue()
+			err = crypto.PopError()
 		}
-		return func() error { return err }
+		return func() error { return fmt.Errorf("syscall error: %w", err) }
 	default:
-		err := crypto.ErrorFromErrorQueue()
-		return func() error { return err }
+		err := crypto.PopError()
+		return func() error { return fmt.Errorf("SSL error: %w", err) }
 	}
 }
 
@@ -298,23 +318,28 @@ func (c *Conn) handleError(errcb func() error) error {
 func (c *Conn) handshake() func() error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	if c.is_shutdown {
+
+	if c.isShutdown {
 		return func() error { return io.ErrUnexpectedEOF }
 	}
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+
 	rv, errno := C.SSL_do_handshake(c.ssl)
 	if rv > 0 {
 		return nil
 	}
+
 	return c.getErrorHandler(rv, errno)
 }
 
 // Handshake performs an SSL handshake. If a handshake is not manually
 // triggered, it will run before the first I/O on the encrypted stream.
 func (c *Conn) Handshake() error {
-	err := tryAgain
-	for err == tryAgain {
+	err := errTryAgain
+
+	for errors.Is(err, errTryAgain) {
 		err = c.handleError(c.handshake())
 	}
 	go c.flushOutputBuffer()
@@ -326,12 +351,12 @@ func (c *Conn) Handshake() error {
 func (c *Conn) PeerCertificate() (*crypto.Certificate, error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	if c.is_shutdown {
-		return nil, errors.New("connection closed")
+	if c.isShutdown {
+		return nil, fmt.Errorf("connection closed: %w", crypto.ErrShutdown)
 	}
 	x := C.SSL_get_peer_certificate(c.ssl)
 	if x == nil {
-		return nil, errors.New("no peer certificate found")
+		return nil, fmt.Errorf("failed to get peer cert: %w", crypto.ErrNoPeerCert)
 	}
 	cert := crypto.NewCertWrapper(unsafe.Pointer(x))
 	runtime.SetFinalizer(cert, func(cert *crypto.Certificate) {
@@ -342,12 +367,10 @@ func (c *Conn) PeerCertificate() (*crypto.Certificate, error) {
 
 // loadCertificateStack loads up a stack of x509 certificates and returns them,
 // handling memory ownership.
-func (c *Conn) loadCertificateStack(sk *C.struct_stack_st_X509) (
-	rv []*crypto.Certificate) {
-
-	sk_num := int(C.X_sk_X509_num(sk))
-	rv = make([]*crypto.Certificate, 0, sk_num)
-	for i := 0; i < sk_num; i++ {
+func (c *Conn) loadCertificateStack(sk *C.struct_stack_st_X509) []*crypto.Certificate {
+	skNum := int(C.X_sk_X509_num(sk))
+	rv := make([]*crypto.Certificate, 0, skNum)
+	for i := 0; i < skNum; i++ {
 		x := C.X_sk_X509_value(sk, C.int(i))
 		// ref holds on to the underlying connection memory so we don't need to
 		// worry about incrementing refcounts manually or freeing the X509
@@ -360,15 +383,15 @@ func (c *Conn) loadCertificateStack(sk *C.struct_stack_st_X509) (
 // the client side, the stack also contains the peer's certificate; if called
 // on the server side, the peer's certificate must be obtained separately using
 // PeerCertificate.
-func (c *Conn) PeerCertificateChain() (rv []*crypto.Certificate, err error) {
+func (c *Conn) PeerCertificateChain() ([]*crypto.Certificate, error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	if c.is_shutdown {
-		return nil, errors.New("connection closed")
+	if c.isShutdown {
+		return nil, fmt.Errorf("connection closed: %w", crypto.ErrShutdown)
 	}
 	sk := C.SSL_get_peer_cert_chain(c.ssl)
 	if sk == nil {
-		return nil, errors.New("no peer certificates found")
+		return nil, fmt.Errorf("no peer certificates found: %w", crypto.ErrNoPeerCert)
 	}
 	return c.loadCertificateStack(sk), nil
 }
@@ -381,11 +404,15 @@ type ConnectionState struct {
 	SessionReused         bool
 }
 
-func (c *Conn) ConnectionState() (rv ConnectionState) {
-	rv.Certificate, rv.CertificateError = c.PeerCertificate()
-	rv.CertificateChain, rv.CertificateChainError = c.PeerCertificateChain()
-	rv.SessionReused = c.SessionReused()
-	return
+func (c *Conn) ConnectionState() ConnectionState {
+	cert, certErr := c.PeerCertificate()
+	certChain, certChainErr := c.PeerCertificateChain()
+	sessReused := c.SessionReused()
+
+	return ConnectionState{
+		Certificate: cert, CertificateError: certErr, CertificateChain: certChain,
+		CertificateChainError: certChainErr, SessionReused: sessReused,
+	}
 }
 
 func (c *Conn) shutdown() func() error {
@@ -408,27 +435,31 @@ func (c *Conn) shutdown() func() error {
 		// without tickling them to close by sending a TCP_FIN packet, or
 		// shutting down the write-side of the connection.
 		return nil
-	} else {
-		return c.getErrorHandler(rv, errno)
 	}
+
+	return c.getErrorHandler(rv, errno)
 }
 
 func (c *Conn) shutdownLoop() error {
-	err := tryAgain
-	shutdown_tries := 0
-	for err == tryAgain {
-		shutdown_tries = shutdown_tries + 1
+	err := errTryAgain
+	shutdownTries := 0
+
+	for errors.Is(err, errTryAgain) {
+		shutdownTries++
 		err = c.handleError(c.shutdown())
 		if err == nil {
 			return c.flushOutputBuffer()
 		}
-		if err == tryAgain && shutdown_tries >= 2 {
-			return errors.New("shutdown requested a third time?")
+
+		if errors.Is(err, errTryAgain) && shutdownTries >= 2 {
+			return fmt.Errorf("shutdown requested a third time? %w", crypto.ErrShutdown)
 		}
 	}
-	if err == io.ErrUnexpectedEOF {
+
+	if errors.Is(err, io.ErrUnexpectedEOF) {
 		err = nil
 	}
+
 	return err
 }
 
@@ -436,92 +467,105 @@ func (c *Conn) shutdownLoop() error {
 // connection.
 func (c *Conn) Close() error {
 	c.mtx.Lock()
-	if c.is_shutdown {
+	if c.isShutdown {
 		c.mtx.Unlock()
 		return nil
 	}
-	c.is_shutdown = true
+	c.isShutdown = true
 	c.mtx.Unlock()
 	var errs utils.ErrorGroup
 	errs.Add(c.shutdownLoop())
 	errs.Add(c.conn.Close())
-	return errs.Finalize()
+
+	err := errs.Finalize()
+	if err != nil {
+		return fmt.Errorf("shutdown or close error: %w", err)
+	}
+
+	return nil
 }
 
-func (c *Conn) read(b []byte) (int, func() error) {
-	if len(b) == 0 {
+func (c *Conn) read(buf []byte) (int, func() error) {
+	if len(buf) == 0 {
 		return 0, nil
 	}
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	if c.is_shutdown {
+	if c.isShutdown {
 		return 0, func() error { return io.EOF }
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	rv, errno := C.SSL_read(c.ssl, unsafe.Pointer(&b[0]), C.int(len(b)))
+	rv, errno := C.SSL_read(c.ssl, unsafe.Pointer(&buf[0]), C.int(len(buf)))
 	if rv > 0 {
 		return int(rv), nil
 	}
 	return 0, c.getErrorHandler(rv, errno)
 }
 
-// Read reads up to len(b) bytes into b. It returns the number of bytes read
+// Read reads up to len(buf) bytes into buf. It returns the number of bytes read
 // and an error if applicable. io.EOF is returned when the caller can expect
 // to see no more data.
-func (c *Conn) Read(b []byte) (n int, err error) {
-	if len(b) == 0 {
+func (c *Conn) Read(buf []byte) (int, error) {
+	if len(buf) == 0 {
 		return 0, nil
 	}
-	err = tryAgain
-	for err == tryAgain {
-		n, errcb := c.read(b)
+	err := errTryAgain
+
+	for errors.Is(err, errTryAgain) {
+		n, errcb := c.read(buf)
 		err = c.handleError(errcb)
 		if err == nil {
 			go c.flushOutputBuffer()
 			return n, nil
 		}
-		if err == io.ErrUnexpectedEOF {
+
+		if errors.Is(err, io.ErrUnexpectedEOF) {
 			err = io.EOF
 		}
 	}
 	return 0, err
 }
 
-func (c *Conn) write(b []byte) (int, func() error) {
-	if len(b) == 0 {
+func (c *Conn) write(buf []byte) (int, func() error) {
+	if len(buf) == 0 {
 		return 0, nil
 	}
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	if c.is_shutdown {
-		err := errors.New("connection closed")
+	if c.isShutdown {
+		err := fmt.Errorf("connection closed: %w", crypto.ErrShutdown)
 		return 0, func() error { return err }
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	rv, errno := C.SSL_write(c.ssl, unsafe.Pointer(&b[0]), C.int(len(b)))
+
+	rv, errno := C.SSL_write(c.ssl, unsafe.Pointer(&buf[0]), C.int(len(buf)))
 	if rv > 0 {
 		return int(rv), nil
 	}
+
 	return 0, c.getErrorHandler(rv, errno)
 }
 
 // Write will encrypt the contents of b and write it to the underlying stream.
 // Performance will be vastly improved if the size of b is a multiple of
 // SSLRecordSize.
-func (c *Conn) Write(b []byte) (written int, err error) {
-	if len(b) == 0 {
+func (c *Conn) Write(data []byte) (int, error) {
+	if len(data) == 0 {
 		return 0, nil
 	}
-	err = tryAgain
-	for err == tryAgain {
-		n, errcb := c.write(b)
+
+	err := errTryAgain
+
+	for errors.Is(err, errTryAgain) {
+		n, errcb := c.write(data)
 		err = c.handleError(errcb)
 		if err == nil {
 			return n, c.flushOutputBuffer()
 		}
 	}
+
 	return 0, err
 }
 
@@ -532,7 +576,13 @@ func (c *Conn) VerifyHostname(host string) error {
 	if err != nil {
 		return err
 	}
-	return cert.VerifyHostname(host)
+
+	err = cert.VerifyHostname(host)
+	if err != nil {
+		return fmt.Errorf("failed to verify hostname: %w", err)
+	}
+
+	return nil
 }
 
 // LocalAddr returns the underlying connection's local address
@@ -547,30 +597,45 @@ func (c *Conn) RemoteAddr() net.Addr {
 
 // SetDeadline calls SetDeadline on the underlying connection.
 func (c *Conn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
+	err := c.conn.SetDeadline(t)
+	if err != nil {
+		return fmt.Errorf("failed to set deadline: %w", err)
+	}
+
+	return nil
 }
 
 // SetReadDeadline calls SetReadDeadline on the underlying connection.
 func (c *Conn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
+	err := c.conn.SetReadDeadline(t)
+	if err != nil {
+		return fmt.Errorf("failed to set read deadline: %w", err)
+	}
+
+	return nil
 }
 
 // SetWriteDeadline calls SetWriteDeadline on the underlying connection.
 func (c *Conn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
+	err := c.conn.SetWriteDeadline(t)
+	if err != nil {
+		return fmt.Errorf("failed to set write deadline: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Conn) UnderlyingConn() net.Conn {
 	return c.conn
 }
 
-func (c *Conn) SetTlsExtHostName(name string) error {
+func (c *Conn) SetTLSExtHostName(name string) error {
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if C.X_SSL_set_tlsext_host_name(c.ssl, cname) == 0 {
-		return crypto.ErrorFromErrorQueue()
+		return fmt.Errorf("failed to set TLS host name: %w", crypto.PopError())
 	}
 	return nil
 }
@@ -588,9 +653,9 @@ func (c *Conn) GetSession() ([]byte, error) {
 	defer runtime.UnlockOSThread()
 
 	// get1 increases the refcount of the session, so we have to free it.
-	session := (*C.SSL_SESSION)(C.SSL_get1_session(c.ssl))
+	session := C.SSL_get1_session(c.ssl)
 	if session == nil {
-		return nil, errors.New("failed to get session")
+		return nil, fmt.Errorf("failed to get session: %w", crypto.ErrNoSession)
 	}
 	defer C.SSL_SESSION_free(session)
 
@@ -605,7 +670,7 @@ func (c *Conn) GetSession() ([]byte, error) {
 	tmp := buf
 	slen2 := C.i2d_SSL_SESSION(session, &tmp)
 	if slen != slen2 {
-		return nil, errors.New("session had different lengths")
+		return nil, fmt.Errorf("session had different lengths: %w", crypto.ErrSessionLength)
 	}
 
 	return C.GoBytes(unsafe.Pointer(buf), slen), nil
@@ -616,22 +681,22 @@ func (c *Conn) setSession(session []byte) error {
 	defer runtime.UnlockOSThread()
 
 	if len(session) == 0 {
-		return fmt.Errorf("session is empty")
+		return fmt.Errorf("session is empty: %w", crypto.ErrEmptySession)
 	}
 
 	cSession := C.CBytes(session)
-	defer C.free(unsafe.Pointer(cSession))
+	defer C.free(cSession)
 
 	ptr := (*C.uchar)(cSession)
-	s := C.d2i_SSL_SESSION(nil, (**C.uchar)(&ptr), C.long(len(session)))
-	if s == nil {
-		return fmt.Errorf("unable to load session: %s", crypto.ErrorFromErrorQueue())
+	sess := C.d2i_SSL_SESSION(nil, &ptr, C.long(len(session)))
+	if sess == nil {
+		return fmt.Errorf("unable to load session: %w", crypto.PopError())
 	}
-	defer C.SSL_SESSION_free(s)
+	defer C.SSL_SESSION_free(sess)
 
-	ret := C.SSL_set_session(c.ssl, s)
+	ret := C.SSL_set_session(c.ssl, sess)
 	if ret != 1 {
-		return fmt.Errorf("unable to set session: %s", crypto.ErrorFromErrorQueue())
+		return fmt.Errorf("unable to set session: %w", crypto.PopError())
 	}
 	return nil
 }
@@ -642,7 +707,7 @@ func (c *Conn) GetALPNNegotiated() (string, error) {
 	var protoLen C.uint
 	C.SSL_get0_alpn_selected(c.ssl, &proto, &protoLen)
 	if protoLen == 0 {
-		return "", fmt.Errorf("no ALPN protocol negotiated")
+		return "", fmt.Errorf("no ALPN protocol negotiated: %w", crypto.ErrNoALPN)
 	}
 	return C.GoStringN((*C.char)(unsafe.Pointer(proto)), C.int(protoLen)), nil
 }

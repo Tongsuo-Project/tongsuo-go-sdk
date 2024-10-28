@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package crypto
+package crypto_test
 
 import (
 	"math/big"
@@ -20,14 +20,19 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 func TestCertGenerate(t *testing.T) {
-	key, err := GenerateRSAKey(768)
+	t.Parallel()
+
+	key, err := crypto.GenerateRSAKey(768)
 	if err != nil {
 		t.Fatal(err)
 	}
-	info := &CertificateInfo{
+
+	info := &crypto.CertificateInfo{
 		Serial:       big.NewInt(int64(1)),
 		Issued:       0,
 		Expires:      24 * time.Hour,
@@ -35,21 +40,26 @@ func TestCertGenerate(t *testing.T) {
 		Organization: "Test",
 		CommonName:   "localhost",
 	}
-	cert, err := NewCertificate(info, key)
+
+	cert, err := crypto.NewCertificate(info, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cert.Sign(key, EVP_SHA256); err != nil {
+
+	if err := cert.Sign(key, crypto.MDSHA256); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCertGenerateSM2(t *testing.T) {
-	key, err := GenerateECKey(Sm2Curve)
+	t.Parallel()
+
+	key, err := crypto.GenerateECKey(crypto.SM2Curve)
 	if err != nil {
 		t.Fatal(err)
 	}
-	info := &CertificateInfo{
+
+	info := &crypto.CertificateInfo{
 		Serial:       big.NewInt(int64(1)),
 		Issued:       0,
 		Expires:      24 * time.Hour,
@@ -57,21 +67,26 @@ func TestCertGenerateSM2(t *testing.T) {
 		Organization: "Test",
 		CommonName:   "localhost",
 	}
-	cert, err := NewCertificate(info, key)
+
+	cert, err := crypto.NewCertificate(info, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cert.Sign(key, EVP_SM3); err != nil {
+
+	if err := cert.Sign(key, crypto.MDSM3); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCAGenerate(t *testing.T) {
-	cakey, err := GenerateRSAKey(768)
+	t.Parallel()
+
+	cakey, err := crypto.GenerateRSAKey(768)
 	if err != nil {
 		t.Fatal(err)
 	}
-	info := &CertificateInfo{
+
+	info := &crypto.CertificateInfo{
 		Serial:       big.NewInt(int64(1)),
 		Issued:       0,
 		Expires:      24 * time.Hour,
@@ -79,26 +94,31 @@ func TestCAGenerate(t *testing.T) {
 		Organization: "Test CA",
 		CommonName:   "CA",
 	}
-	ca, err := NewCertificate(info, cakey)
+
+	ca, err := crypto.NewCertificate(info, cakey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ca.AddExtensions(map[NID]string{
-		NID_basic_constraints:      "critical,CA:TRUE",
-		NID_key_usage:              "critical,keyCertSign,cRLSign",
-		NID_subject_key_identifier: "hash",
-		NID_netscape_cert_type:     "sslCA",
+
+	if err := ca.AddExtensions(map[crypto.NID]string{
+		crypto.NidBasicConstraints:     "critical,CA:TRUE",
+		crypto.NidKeyUsage:             "critical,keyCertSign,cRLSign",
+		crypto.NidSubjectKeyIdentifier: "hash",
+		crypto.NidNetscapeCertType:     "sslCA",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ca.Sign(cakey, EVP_SHA256); err != nil {
+
+	if err := ca.Sign(cakey, crypto.MDSHA256); err != nil {
 		t.Fatal(err)
 	}
-	key, err := GenerateRSAKey(768)
+
+	key, err := crypto.GenerateRSAKey(768)
 	if err != nil {
 		t.Fatal(err)
 	}
-	info = &CertificateInfo{
+
+	info = &crypto.CertificateInfo{
 		Serial:       big.NewInt(int64(1)),
 		Issued:       0,
 		Expires:      24 * time.Hour,
@@ -106,78 +126,89 @@ func TestCAGenerate(t *testing.T) {
 		Organization: "Test",
 		CommonName:   "localhost",
 	}
-	cert, err := NewCertificate(info, key)
+
+	cert, err := crypto.NewCertificate(info, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cert.AddExtensions(map[NID]string{
-		NID_basic_constraints: "critical,CA:FALSE",
-		NID_key_usage:         "keyEncipherment",
-		NID_ext_key_usage:     "serverAuth",
+
+	if err := cert.AddExtensions(map[crypto.NID]string{
+		crypto.NidBasicConstraints: "critical,CA:FALSE",
+		crypto.NidKeyUsage:         "keyEncipherment",
+		crypto.NidExtKeyUsage:      "serverAuth",
 	}); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := cert.SetIssuer(ca); err != nil {
 		t.Fatal(err)
 	}
-	if err := cert.Sign(cakey, EVP_SHA256); err != nil {
+
+	if err := cert.Sign(cakey, crypto.MDSHA256); err != nil {
 		t.Fatal(err)
 	}
 }
 
+func generateSM2KeyAndSave(t *testing.T, filename string) crypto.PrivateKey {
+	t.Helper()
+
+	key, err := crypto.GenerateECKey(crypto.SM2Curve)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pem, err := key.MarshalPKCS8PrivateKeyPEM()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = crypto.SavePEMToFile(pem, filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return key
+}
+
 func TestCAGenerateSM2(t *testing.T) {
+	t.Parallel()
+
 	dirName := filepath.Join("test-runs", "TestCAGenerateSM2")
 	_, err := os.Stat(dirName)
+
 	if os.IsNotExist(err) {
-		// The directory does not exist, creating it now.
-		err := os.MkdirAll(dirName, 0755)
+		err := os.MkdirAll(dirName, 0o755)
 		if err != nil {
 			t.Logf("Failed to create the directory: %v\n", err)
 		}
 	} else if err != nil {
-		// other error
 		t.Logf("Failed to check the directory: %v\n", err)
 	}
 
-	// Helper function: generate and save key
-	generateAndSaveKey := func(filename string) PrivateKey {
-		key, err := GenerateECKey(Sm2Curve)
+	signAndSaveCert := func(cert *crypto.Certificate, caKey crypto.PrivateKey, filename string) {
+		err := cert.Sign(caKey, crypto.MDSM3)
 		if err != nil {
 			t.Fatal(err)
 		}
-		pem, err := key.MarshalPKCS8PrivateKeyPEM()
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = SavePEMToFile(pem, filename)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return key
-	}
 
-	// Helper function: sign and save certificate
-	signAndSaveCert := func(cert *Certificate, caKey PrivateKey, filename string) {
-		err := cert.Sign(caKey, EVP_SM3)
-		if err != nil {
-			t.Fatal(err)
-		}
 		certPem, err := cert.MarshalPEM()
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = SavePEMToFile(certPem, filename)
+
+		err = crypto.SavePEMToFile(certPem, filename)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Create CA certificate
-	caKey, err := GenerateECKey(Sm2Curve)
+	caKey, err := crypto.GenerateECKey(crypto.SM2Curve)
 	if err != nil {
 		t.Fatal(err)
 	}
-	caInfo := CertificateInfo{
+
+	caInfo := crypto.CertificateInfo{
 		big.NewInt(1),
 		0,
 		87600 * time.Hour, // 10 years
@@ -185,24 +216,26 @@ func TestCAGenerateSM2(t *testing.T) {
 		"Test CA",
 		"CA",
 	}
-	caExtensions := map[NID]string{
-		NID_basic_constraints:        "critical,CA:TRUE",
-		NID_key_usage:                "critical,digitalSignature,keyCertSign,cRLSign",
-		NID_subject_key_identifier:   "hash",
-		NID_authority_key_identifier: "keyid:always,issuer",
+	caExtensions := map[crypto.NID]string{
+		crypto.NidBasicConstraints:       "critical,CA:TRUE",
+		crypto.NidKeyUsage:               "critical,digitalSignature,keyCertSign,cRLSign",
+		crypto.NidSubjectKeyIdentifier:   "hash",
+		crypto.NidAuthorityKeyIdentifier: "keyid:always,issuer",
 	}
-	ca, err := NewCertificate(&caInfo, caKey)
+
+	ca, err := crypto.NewCertificate(&caInfo, caKey)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = ca.AddExtensions(caExtensions)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	caFile := filepath.Join(dirName, "chain-ca.crt")
 	signAndSaveCert(ca, caKey, caFile)
 
-	// Define additional certificate information
 	certInfos := []struct {
 		name     string
 		keyUsage string
@@ -213,11 +246,10 @@ func TestCAGenerateSM2(t *testing.T) {
 		{"client_enc", "keyAgreement, keyEncipherment, dataEncipherment"},
 	}
 
-	// Create additional certificates
 	for _, info := range certInfos {
 		keyFile := filepath.Join(dirName, info.name+".key")
-		key := generateAndSaveKey(keyFile)
-		certInfo := CertificateInfo{
+		key := generateSM2KeyAndSave(t, keyFile)
+		certInfo := crypto.CertificateInfo{
 			Serial:       big.NewInt(1),
 			Issued:       0,
 			Expires:      87600 * time.Hour, // 10 years
@@ -225,33 +257,40 @@ func TestCAGenerateSM2(t *testing.T) {
 			Organization: "Test",
 			CommonName:   "localhost",
 		}
-		extensions := map[NID]string{
-			NID_basic_constraints: "critical,CA:FALSE",
-			NID_key_usage:         info.keyUsage,
+		extensions := map[crypto.NID]string{
+			crypto.NidBasicConstraints: "critical,CA:FALSE",
+			crypto.NidKeyUsage:         info.keyUsage,
 		}
-		cert, err := NewCertificate(&certInfo, key)
+
+		cert, err := crypto.NewCertificate(&certInfo, key)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		err = cert.AddExtensions(extensions)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		err = cert.SetIssuer(ca)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		certFile := filepath.Join(dirName, info.name+".crt")
 		signAndSaveCert(cert, caKey, certFile)
 	}
 }
 
 func TestCertGetNameEntry(t *testing.T) {
-	key, err := GenerateRSAKey(768)
+	t.Parallel()
+
+	key, err := crypto.GenerateRSAKey(768)
 	if err != nil {
 		t.Fatal(err)
 	}
-	info := &CertificateInfo{
+
+	info := &crypto.CertificateInfo{
 		Serial:       big.NewInt(int64(1)),
 		Issued:       0,
 		Expires:      24 * time.Hour,
@@ -259,36 +298,45 @@ func TestCertGetNameEntry(t *testing.T) {
 		Organization: "Test",
 		CommonName:   "localhost",
 	}
-	cert, err := NewCertificate(info, key)
+
+	cert, err := crypto.NewCertificate(info, key)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	name, err := cert.GetSubjectName()
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry, ok := name.GetEntry(NID_commonName)
+
+	entry, ok := name.GetEntry(crypto.NidCommonName)
 	if !ok {
 		t.Fatal("no common name")
 	}
+
 	if entry != "localhost" {
 		t.Fatalf("expected localhost; got %q", entry)
 	}
-	entry, ok = name.GetEntry(NID_localityName)
+
+	entry, ok = name.GetEntry(crypto.NidLocalityName)
 	if ok {
 		t.Fatal("did not expect a locality name")
 	}
+
 	if entry != "" {
 		t.Fatalf("entry should be empty; got %q", entry)
 	}
 }
 
 func TestCertVersion(t *testing.T) {
-	key, err := GenerateRSAKey(768)
+	t.Parallel()
+
+	key, err := crypto.GenerateRSAKey(768)
 	if err != nil {
 		t.Fatal(err)
 	}
-	info := &CertificateInfo{
+
+	info := &crypto.CertificateInfo{
 		Serial:       big.NewInt(int64(1)),
 		Issued:       0,
 		Expires:      24 * time.Hour,
@@ -296,14 +344,17 @@ func TestCertVersion(t *testing.T) {
 		Organization: "Test",
 		CommonName:   "localhost",
 	}
-	cert, err := NewCertificate(info, key)
+
+	cert, err := crypto.NewCertificate(info, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cert.SetVersion(X509_V3); err != nil {
+
+	if err := cert.SetVersion(crypto.X509V3); err != nil {
 		t.Fatal(err)
 	}
-	if vers := cert.GetVersion(); vers != X509_V3 {
+
+	if vers := cert.GetVersion(); vers != crypto.X509V3 {
 		t.Fatalf("bad version: %d", vers)
 	}
 }

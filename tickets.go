@@ -102,58 +102,56 @@ func (t *TicketStore) digestEngine() *C.ENGINE {
 
 const (
 	// instruct to do a handshake
-	ticket_resp_requireHandshake = 0
+	ticketRespRequireHandshake = 0
 	// crypto context is set up correctly
-	ticket_resp_sessionOk = 1
+	ticketRespSessionOk = 1
 	// crypto context is ok, but the ticket should be reissued
-	ticket_resp_renewSession = 2
+	ticketRespRenewSession = 2
 	// we had a problem that shouldn't fall back to doing a handshake
-	ticket_resp_error = -1
-
+	ticketRespError = -1
 	// asked to create session crypto context
-	ticket_req_newSession = 1
+	ticketReqNewSession = 1
 	// asked to load crypto context for a previous session
-	ticket_req_lookupSession = 0
+	ticketReqLookupSession = 0
 )
 
 //export go_ticket_key_cb_thunk
-func go_ticket_key_cb_thunk(p unsafe.Pointer, s *C.SSL, key_name *C.uchar,
-	iv *C.uchar, cctx *C.EVP_CIPHER_CTX, hctx *C.HMAC_CTX, enc C.int) C.int {
-
+func go_ticket_key_cb_thunk(pctx unsafe.Pointer, keyName *C.uchar, cctx *C.EVP_CIPHER_CTX, hctx *C.HMAC_CTX, enc C.int,
+) C.int {
 	// no panic's allowed. it's super hard to guarantee any state at this point
 	// so just abort everything.
 	defer func() {
 		if err := recover(); err != nil {
-			//logger.Critf("openssl: ticket key callback panic'd: %v", err)
+			// logger.Critf("openssl: ticket key callback panic'd: %v", err)
 			os.Exit(1)
 		}
 	}()
 
-	ctx := (*Ctx)(p)
-	store := ctx.ticket_store
+	ctx := (*Ctx)(pctx)
+	store := ctx.ticketStore
 	if store == nil {
-		// TODO(jeff): should this be an error condition? it doesn't make sense
+		// should this be an error condition? it doesn't make sense
 		// to be called if we don't have a store I believe, but that's probably
 		// not worth aborting the handshake which is what I believe returning
 		// an error would do.
-		return ticket_resp_requireHandshake
+		return ticketRespRequireHandshake
 	}
 
-	ctx.ticket_store_mu.Lock()
-	defer ctx.ticket_store_mu.Unlock()
+	ctx.ticketStoreMu.Lock()
+	defer ctx.ticketStoreMu.Unlock()
 
 	switch enc {
-	case ticket_req_newSession:
+	case ticketReqNewSession:
 		key := store.Keys.Current()
 		if key == nil {
 			key = store.Keys.New()
 			if key == nil {
-				return ticket_resp_requireHandshake
+				return ticketRespRequireHandshake
 			}
 		}
 
 		C.memcpy(
-			unsafe.Pointer(key_name),
+			unsafe.Pointer(keyName),
 			unsafe.Pointer(&key.Name[0]),
 			KeyNameSize)
 		C.EVP_EncryptInit_ex(
@@ -169,21 +167,21 @@ func go_ticket_key_cb_thunk(p unsafe.Pointer, s *C.SSL, key_name *C.uchar,
 			(*C.EVP_MD)(store.DigestCtx.Digest.Ptr()),
 			store.digestEngine())
 
-		return ticket_resp_sessionOk
+		return ticketRespSessionOk
 
-	case ticket_req_lookupSession:
+	case ticketReqLookupSession:
 		var name TicketName
 		C.memcpy(
 			unsafe.Pointer(&name[0]),
-			unsafe.Pointer(key_name),
+			unsafe.Pointer(keyName),
 			KeyNameSize)
 
 		key := store.Keys.Lookup(name)
 		if key == nil {
-			return ticket_resp_requireHandshake
+			return ticketRespRequireHandshake
 		}
 		if store.Keys.Expired(name) {
-			return ticket_resp_requireHandshake
+			return ticketRespRequireHandshake
 		}
 
 		C.EVP_DecryptInit_ex(
@@ -200,20 +198,20 @@ func go_ticket_key_cb_thunk(p unsafe.Pointer, s *C.SSL, key_name *C.uchar,
 			store.digestEngine())
 
 		if store.Keys.ShouldRenew(name) {
-			return ticket_resp_renewSession
+			return ticketRespRenewSession
 		}
 
-		return ticket_resp_sessionOk
+		return ticketRespSessionOk
 
 	default:
-		return ticket_resp_error
+		return ticketRespError
 	}
 }
 
 // SetTicketStore sets the ticket store for the context so that clients can do
 // ticket based session resumption. If the store is nil, the
 func (c *Ctx) SetTicketStore(store *TicketStore) {
-	c.ticket_store = store
+	c.ticketStore = store
 
 	if store == nil {
 		C.X_SSL_CTX_set_tlsext_ticket_key_cb(c.ctx, nil)

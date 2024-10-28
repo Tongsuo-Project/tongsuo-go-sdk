@@ -16,10 +16,6 @@ package crypto
 
 // #include "shim.h"
 import "C"
-import (
-	"errors"
-	"unsafe"
-)
 
 // DeriveSharedSecret derives a shared secret using a private key and a peer's
 // public key.
@@ -29,38 +25,38 @@ func DeriveSharedSecret(private PrivateKey, public PublicKey) ([]byte, error) {
 	// Create context for the shared secret derivation
 	dhCtx := C.EVP_PKEY_CTX_new(private.EvpPKey(), nil)
 	if dhCtx == nil {
-		return nil, errors.New("failed creating shared secret derivation context")
+		return nil, PopError()
 	}
 	defer C.EVP_PKEY_CTX_free(dhCtx)
 
 	// Initialize the context
 	if int(C.EVP_PKEY_derive_init(dhCtx)) != 1 {
-		return nil, errors.New("failed initializing shared secret derivation context")
+		return nil, PopError()
 	}
 
 	// Provide the peer's public key
 	if int(C.EVP_PKEY_derive_set_peer(dhCtx, public.EvpPKey())) != 1 {
-		return nil, errors.New("failed adding peer public key to context")
+		return nil, PopError()
 	}
 
 	// Determine how large of a buffer we need for the shared secret
 	var buffLen C.size_t
 	if int(C.EVP_PKEY_derive(dhCtx, nil, &buffLen)) != 1 {
-		return nil, errors.New("failed determining shared secret length")
+		return nil, PopError()
 	}
 
 	// Allocate a buffer
 	buffer := C.X_OPENSSL_malloc(buffLen)
 	if buffer == nil {
-		return nil, errors.New("failed allocating buffer for shared secret")
+		return nil, ErrMallocFailure
 	}
 	defer C.X_OPENSSL_free(buffer)
 
 	// Derive the shared secret
 	if int(C.EVP_PKEY_derive(dhCtx, (*C.uchar)(buffer), &buffLen)) != 1 {
-		return nil, errors.New("failed deriving the shared secret")
+		return nil, PopError()
 	}
 
-	secret := C.GoBytes(unsafe.Pointer(buffer), C.int(buffLen))
+	secret := C.GoBytes(buffer, C.int(buffLen))
 	return secret, nil
 }

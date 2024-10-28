@@ -25,9 +25,7 @@ package crypto
 CRITICAL_SECTION* goopenssl_locks;
 
 int go_init_locks() {
-	int rc = 0;
 	int nlock;
-	int i;
 	int locks_needed = CRYPTO_num_locks();
 
 	goopenssl_locks = (CRITICAL_SECTION*)malloc(

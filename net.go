@@ -16,25 +16,31 @@ package tongsuogo
 
 import (
 	"errors"
+	"fmt"
 	"net"
 )
+
+var ErrNilParam = errors.New("nil parameter")
 
 type listener struct {
 	net.Listener
 	ctx *Ctx
 }
 
-func (l *listener) Accept() (c net.Conn, err error) {
-	c, err = l.Listener.Accept()
+func (l *listener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
 	if err != nil {
+		return nil, fmt.Errorf("failed to accept: %w", err)
+	}
+
+	server, err := Server(conn, l.ctx)
+	if err != nil {
+		conn.Close()
+
 		return nil, err
 	}
-	ssl_c, err := Server(c, l.ctx)
-	if err != nil {
-		c.Close()
-		return nil, err
-	}
-	return ssl_c, nil
+
+	return server, nil
 }
 
 // NewListener wraps an existing net.Listener such that all accepted
@@ -51,12 +57,14 @@ func NewListener(inner net.Listener, ctx *Ctx) net.Listener {
 // an OpenSSL server connection using the provided context ctx.
 func Listen(network, laddr string, ctx *Ctx) (net.Listener, error) {
 	if ctx == nil {
-		return nil, errors.New("no ssl context provided")
+		return nil, fmt.Errorf("no ssl context provided: %w", ErrNilParam)
 	}
+
 	l, err := net.Listen(network, laddr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to listen: %w", err)
 	}
+
 	return NewListener(l, ctx), nil
 }
 
@@ -95,57 +103,71 @@ func Dial(network, addr string, ctx *Ctx, flags DialFlags, host string) (*Conn, 
 // If session is not nil it will be used to resume the tls state. The session
 // can be retrieved from the GetSession method on the Conn.
 func DialSession(network, addr string, ctx *Ctx, flags DialFlags,
-	session []byte, host string) (*Conn, error) {
-
+	session []byte, host string,
+) (*Conn, error) {
 	var err error
 	if host == "" {
 		host, _, err = net.SplitHostPort(addr)
 	}
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to split host and port: %w", err)
 	}
+
 	if ctx == nil {
 		var err error
+
 		ctx, err = NewCtx()
 		if err != nil {
 			return nil, err
 		}
-		// TODO: use operating system default certificate chain?
 	}
-	c, err := net.Dial(network, addr)
+
+	conn, err := net.Dial(network, addr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
-	conn, err := Client(c, ctx)
-	if err != nil {
-		c.Close()
-		return nil, err
-	}
-	if session != nil {
-		err := conn.setSession(session)
-		if err != nil {
-			c.Close()
-			return nil, err
-		}
-	}
-	if flags&DisableSNI == 0 {
-		err = conn.SetTlsExtHostName(host)
-		if err != nil {
-			conn.Close()
-			return nil, err
-		}
-	}
-	err = conn.Handshake()
+
+	client, err := Client(conn, ctx)
 	if err != nil {
 		conn.Close()
+
 		return nil, err
 	}
-	if flags&InsecureSkipHostVerification == 0 {
-		err = conn.VerifyHostname(host)
+
+	if session != nil {
+		err := client.setSession(session)
 		if err != nil {
 			conn.Close()
+
 			return nil, err
 		}
 	}
-	return conn, nil
+
+	if flags&DisableSNI == 0 {
+		err = client.SetTLSExtHostName(host)
+		if err != nil {
+			client.Close()
+
+			return nil, fmt.Errorf("failed to set TLS host name: %w", err)
+		}
+	}
+
+	err = client.Handshake()
+	if err != nil {
+		client.Close()
+
+		return nil, fmt.Errorf("failed to handshake: %w", err)
+	}
+
+	if flags&InsecureSkipHostVerification == 0 {
+		err = client.VerifyHostname(host)
+		if err != nil {
+			client.Close()
+
+			return nil, fmt.Errorf("failed to verify host name: %w", err)
+		}
+	}
+
+	return client, nil
 }

@@ -18,15 +18,15 @@ import (
 	"regexp"
 )
 
-var pemSplit *regexp.Regexp = regexp.MustCompile(`(?sm)` +
+var pemSplit = regexp.MustCompile(`(?sm)` +
 	`(^-----[\s-]*?BEGIN.*?-----$` +
 	`.*?` +
 	`^-----[\s-]*?END.*?-----$)`)
 
 func SplitPEM(data []byte) [][]byte {
 	var results [][]byte
-	for _, block := range pemSplit.FindAll(data, -1) {
-		results = append(results, block)
-	}
+
+	results = append(results, pemSplit.FindAll(data, -1)...)
+
 	return results
 }
