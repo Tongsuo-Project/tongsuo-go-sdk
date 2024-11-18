@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto/sm2"
 )
@@ -29,6 +30,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Printf("SM2(%s)=%s\n", data, hex.EncodeToString(ciphertext))
 
 	// Decrypt ciphertext

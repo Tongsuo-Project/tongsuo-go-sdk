@@ -29,10 +29,9 @@
 #include "_cgo_export.h"
 
 
-int X_tongsuogo_init(void) {
+void X_tongsuogo_init(void) {
 	SSL_load_error_strings();
 	SSL_library_init();
-	return 0;
 }
 
 long X_SSL_set_options(SSL* ssl, long options) {
@@ -218,7 +217,7 @@ int X_SSL_CTX_ticket_key_cb(SSL *s, unsigned char key_name[16],
 	SSL_CTX* ssl_ctx = SSL_get_SSL_CTX(s);
 	void* p = SSL_CTX_get_ex_data(ssl_ctx, get_ssl_ctx_idx());
 	// get the pointer to the go Ctx object and pass it back into the thunk
-	return go_ticket_key_cb_thunk(p, s, key_name, iv, cctx, hctx, enc);
+	return go_ticket_key_cb_thunk(p, key_name, cctx, hctx, enc);
 }
 
 int X_X509_add_ref(X509* x509) {

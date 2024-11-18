@@ -12,31 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package crypto
+package crypto_test
 
 import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"testing"
+
+	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 )
 
 func TestSHA256HMAC(t *testing.T) {
+	t.Parallel()
+
 	key := []byte("d741787cc61851af045ccd37")
 	data := []byte("5912EEFD-59EC-43E3-ADB8-D5325AEC3271")
 
-	h, err := NewHMAC(key, EVP_SHA256)
+	tsHmac, err := crypto.NewHMAC(key, crypto.MDSHA256)
 	if err != nil {
 		t.Fatalf("Unable to create new HMAC: %s", err)
 	}
-	if _, err := h.Write(data); err != nil {
+
+	if _, err := tsHmac.Write(data); err != nil {
 		t.Fatalf("Unable to write data into HMAC: %s", err)
 	}
 
 	var actualHMACBytes []byte
-	if actualHMACBytes, err = h.Final(); err != nil {
+
+	if actualHMACBytes, err = tsHmac.Final(); err != nil {
 		t.Fatalf("Error while finalizing HMAC: %s", err)
 	}
+
 	actualString := hex.EncodeToString(actualHMACBytes)
 
 	// generate HMAC with built-in crypto lib
@@ -53,19 +60,20 @@ func BenchmarkSHA256HMAC(b *testing.B) {
 	key := []byte("d741787cc61851af045ccd37")
 	data := []byte("5912EEFD-59EC-43E3-ADB8-D5325AEC3271")
 
-	h, err := NewHMAC(key, EVP_SHA256)
+	tsHmac, err := crypto.NewHMAC(key, crypto.MDSHA256)
 	if err != nil {
 		b.Fatalf("Unable to create new HMAC: %s", err)
 	}
 
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
-		if _, err := h.Write(data); err != nil {
+		if _, err := tsHmac.Write(data); err != nil {
 			b.Fatalf("Unable to write data into HMAC: %s", err)
 		}
 
 		var err error
-		if _, err = h.Final(); err != nil {
+		if _, err = tsHmac.Final(); err != nil {
 			b.Fatalf("Error while finalizing HMAC: %s", err)
 		}
 	}

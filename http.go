@@ -15,27 +15,34 @@
 package tongsuogo
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 )
+
+const defaultReadHeaderTimeout = 120
 
 // ListenAndServeTLS will take an http.Handler and serve it using OpenSSL over
 // the given tcp address, configured to use the provided cert and key files.
-func ListenAndServeTLS(addr string, cert_file string, key_file string,
-	handler http.Handler) error {
+func ListenAndServeTLS(addr string, certFile string, keyFile string,
+	handler http.Handler,
+) error {
 	return ServerListenAndServeTLS(
-		&http.Server{Addr: addr, Handler: handler}, cert_file, key_file)
+		&http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: defaultReadHeaderTimeout * time.Second},
+		certFile, keyFile)
 }
 
 // ServerListenAndServeTLS will take an http.Server and serve it using OpenSSL
 // configured to use the provided cert and key files.
 func ServerListenAndServeTLS(srv *http.Server,
-	cert_file, key_file string) error {
+	certFile, keyFile string,
+) error {
 	addr := srv.Addr
 	if addr == "" {
 		addr = ":https"
 	}
 
-	ctx, err := NewCtxFromFiles(cert_file, key_file)
+	ctx, err := NewCtxFromFiles(certFile, keyFile)
 	if err != nil {
 		return err
 	}
@@ -45,7 +52,12 @@ func ServerListenAndServeTLS(srv *http.Server,
 		return err
 	}
 
-	return srv.Serve(l)
+	err = srv.Serve(l)
+	if err != nil {
+		return fmt.Errorf("failed to serve tls: %w", err)
+	}
+
+	return nil
 }
 
 // TODO: http client integration

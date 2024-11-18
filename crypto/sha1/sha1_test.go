@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sha1
+package sha1_test
 
 import (
 	"crypto/rand"
 	"crypto/sha1"
 	"io"
 	"testing"
+
+	tsSHA1 "github.com/tongsuo-project/tongsuo-go-sdk/crypto/sha1"
 )
 
 func TestSHA1(t *testing.T) {
+	t.Parallel()
+
 	for i := 0; i < 100; i++ {
 		buf := make([]byte, 10*1024-i)
 		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
@@ -29,7 +33,8 @@ func TestSHA1(t *testing.T) {
 		}
 
 		expected := sha1.Sum(buf)
-		got, err := Sum(buf)
+
+		got, err := tsSHA1.Sum(buf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -41,18 +46,24 @@ func TestSHA1(t *testing.T) {
 }
 
 func TestSHA1Writer(t *testing.T) {
-	ohash, err := New()
+	t.Parallel()
+
+	ohash, err := tsSHA1.New()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	hash := sha1.New()
 
 	for i := 0; i < 100; i++ {
 		if err := ohash.Reset(); err != nil {
 			t.Fatal(err)
 		}
+
 		hash.Reset()
+
 		buf := make([]byte, 10*1024-i)
+
 		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
 			t.Fatal(err)
 		}
@@ -60,6 +71,7 @@ func TestSHA1Writer(t *testing.T) {
 		if _, err := ohash.Write(buf); err != nil {
 			t.Fatal(err)
 		}
+
 		if _, err := hash.Write(buf); err != nil {
 			t.Fatal(err)
 		}
@@ -67,6 +79,7 @@ func TestSHA1Writer(t *testing.T) {
 		var got, exp [20]byte
 
 		hash.Sum(exp[:0])
+
 		got, err := ohash.Sum()
 		if err != nil {
 			t.Fatal(err)
@@ -81,19 +94,23 @@ func TestSHA1Writer(t *testing.T) {
 type shafunc func([]byte)
 
 func benchmarkSHA1(b *testing.B, length int64, fn shafunc) {
+	b.Helper()
+
 	buf := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, buf); err != nil {
 		b.Fatal(err)
 	}
+
 	b.SetBytes(length)
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		fn(buf)
 	}
 }
 
 func BenchmarkSHA1Large_openssl(b *testing.B) {
-	benchmarkSHA1(b, 1024*1024, func(buf []byte) { Sum(buf) })
+	benchmarkSHA1(b, 1024*1024, func(buf []byte) { _, _ = tsSHA1.Sum(buf) })
 }
 
 func BenchmarkSHA1Large_stdlib(b *testing.B) {
@@ -101,7 +118,7 @@ func BenchmarkSHA1Large_stdlib(b *testing.B) {
 }
 
 func BenchmarkSHA1Small_openssl(b *testing.B) {
-	benchmarkSHA1(b, 1, func(buf []byte) { Sum(buf) })
+	benchmarkSHA1(b, 1, func(buf []byte) { _, _ = tsSHA1.Sum(buf) })
 }
 
 func BenchmarkSHA1Small_stdlib(b *testing.B) {

@@ -31,7 +31,7 @@
 #endif
 
 /* shim  methods */
-extern int X_tongsuogo_init(void);
+extern void X_tongsuogo_init(void);
 
 /* SSL methods */
 extern long X_SSL_set_options(SSL* ssl, long options);

@@ -1,0 +1,89 @@
+linters:
+  enable-all: true
+  disable:
+    - ireturn
+    - gochecknoinits
+    - exhaustruct
+    - nlreturn
+
+linters-settings:
+  cyclop:
+    max-complexity: 20
+  interfacebloat:
+    max: 11
+  lll:
+    line-length: 120
+  funlen:
+    lines: 120
+    statements: 80
+    ignore-comments: true
+  depguard:
+    rules:
+      main:
+        allow:
+          - $gostd
+          - github.com/tongsuo-project/tongsuo-go-sdk
+          - github.com/tongsuo-project/tongsuo-go-sdk/crypto
+          - github.com/tongsuo-project/tongsuo-go-sdk/utils
+
+issues:
+  exclude:
+    - "variable name '(i|e|n|wg|md|ok|ca|bn|iv|ip|rv|rc|fn)' is too short for the scope of its usage"
+    - "parameter name '(e|r|s|ok|in|ip|iv|fn|rv)' is too short for the scope of its usage"
+  exclude-rules:
+    - path: crypto/sha1/sha1_test.go
+      linters:
+        - gosec
+    - path: crypto/md5/md5_test.go
+      linters:
+        - gosec
+    - path: conn.go
+      text: "Error return value of `c.flushOutputBuffer` is not checked"
+    - path: utils/errors.go
+      text: "do not define dynamic errors, use wrapped static errors instead:"
+    - path: ntls_test.go
+      text: "Error return value of `server.(Run|RunForALPN)` is not checked"
+    - path: ssl_test.go
+      text: "G402: TLS InsecureSkipVerify set true."
+    - path: crypto/key_test.go
+      text: "G101: Potential hardcoded credentials: (RSA|SSH \\(EC\\)) private key"
+    - path: ssl_test.go
+      text: "G101: Potential hardcoded credentials: (RSA|SSH \\(EC\\)) private key"
+    - path: ssl_test.go
+      text: "G402: TLS MinVersion too low."
+    - path: ctx.go
+      text: "Consider pre-allocating `protoList`"
+    - path: crypto/ciphers_gcm.go
+      text: "Magic number: (128|192|256), in <case> detected"
+    - path: .*\.go
+      text: "dupSubExpr: suspicious identical LHS and RHS for `==` operator"
+    - path: crypto/sm2/sm2.go
+      text: "return with no blank line before"
+    - path: crypto/bio.go
+      text: "return with no blank line before"
+    - path: crypto/bio.go
+      text: "(readBioMapping|writeBioMapping) is a global variable"
+    - path: crypto/key_test.go
+      text: "Function '(TestMarshal|TestMarshalEC)' has too many statements"
+    - path: ctx.go
+      text: "sslCtxIdx is a global variable"
+    - path: ssl.go
+      text: "sslIdx is a global variable"
+    - path: .*_test\.go
+      text: "cognitive complexity (.*) of func `(TestMarshalEC|TestMarshal|TestSessionReuse|TestNTLS)` is high"
+    - path: .*_test\.go
+      text: "cyclomatic complexity (.*) of func `(TestMarshalEC|TestMarshal)` is high"
+    - path: .*_test\.go
+      text: "calculated cyclomatic complexity for function (TestMarshal|TestMarshalEC) is (.*), max is (.*)"
+    - path: .*_test\.go
+      text: "error returned from external package is unwrapped"
+    - path: crypto/key.go
+      text: "`if curve == SM2Curve` has complex nested blocks \\(complexity: 6\\)"
+    - path: crypto/init.go
+      text: "do not define dynamic errors, use wrapped static errors instead:"
+    - path: http.go
+      text: "http.go:(.*): Line contains TODO/BUG/FIXME: \"TODO: http client integration\""
+    - path: ctx.go
+      text: "errorf: should replace errors.New"
+    - path: ctx.go
+      text: "do not define dynamic errors, use wrapped static errors instead:"

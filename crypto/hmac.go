@@ -18,7 +18,7 @@ package crypto
 import "C"
 
 import (
-	"errors"
+	"fmt"
 	"runtime"
 	"unsafe"
 )
@@ -29,63 +29,58 @@ type HMAC struct {
 	md     *C.EVP_MD
 }
 
-func NewHMAC(key []byte, digestAlgorithm EVP_MD) (*HMAC, error) {
+func NewHMAC(key []byte, digestAlgorithm MDAlgo) (*HMAC, error) {
 	return NewHMACWithEngine(key, digestAlgorithm, nil)
 }
 
-func NewHMACWithEngine(key []byte, digestAlgorithm EVP_MD, e *Engine) (*HMAC, error) {
+func NewHMACWithEngine(key []byte, digestAlgorithm MDAlgo, e *Engine) (*HMAC, error) {
 	var md *C.EVP_MD = getDigestFunction(digestAlgorithm)
-	h := &HMAC{engine: e, md: md}
-	h.ctx = C.X_HMAC_CTX_new()
-	if h.ctx == nil {
-		return nil, errors.New("unable to allocate HMAC_CTX")
+	hmac := &HMAC{ctx: nil, engine: e, md: md}
+	hmac.ctx = C.X_HMAC_CTX_new()
+	if hmac.ctx == nil {
+		return nil, ErrMallocFailure
 	}
 
-	var c_e *C.ENGINE
+	var cEngine *C.ENGINE
 	if e != nil {
-		c_e = (*C.ENGINE)(e.Engine())
+		cEngine = e.Engine()
 	}
-	if rc := C.X_HMAC_Init_ex(h.ctx,
-		unsafe.Pointer(&key[0]),
-		C.int(len(key)),
-		md,
-		c_e); rc != 1 {
-		C.X_HMAC_CTX_free(h.ctx)
-		return nil, errors.New("failed to initialize HMAC_CTX")
+	if rc := C.X_HMAC_Init_ex(hmac.ctx, unsafe.Pointer(&key[0]), C.int(len(key)), md, cEngine); rc != 1 {
+		C.X_HMAC_CTX_free(hmac.ctx)
+		return nil, fmt.Errorf("failed to init HMAC_CTX: %w", PopError())
 	}
 
-	runtime.SetFinalizer(h, func(h *HMAC) { h.Close() })
-	return h, nil
+	runtime.SetFinalizer(hmac, func(h *HMAC) { h.Close() })
+	return hmac, nil
 }
 
 func (h *HMAC) Close() {
 	C.X_HMAC_CTX_free(h.ctx)
 }
 
-func (h *HMAC) Write(data []byte) (n int, err error) {
+func (h *HMAC) Write(data []byte) (int, error) {
 	if len(data) == 0 {
 		return 0, nil
 	}
-	if rc := C.X_HMAC_Update(h.ctx, (*C.uchar)(unsafe.Pointer(&data[0])),
-		C.size_t(len(data))); rc != 1 {
-		return 0, errors.New("failed to update HMAC")
+	if C.X_HMAC_Update(h.ctx, (*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data))) != 1 {
+		return 0, fmt.Errorf("failed to update HMAC: %w", PopError())
 	}
 	return len(data), nil
 }
 
 func (h *HMAC) Reset() error {
-	if 1 != C.X_HMAC_Init_ex(h.ctx, nil, 0, nil, nil) {
-		return errors.New("failed to reset HMAC_CTX")
+	if C.X_HMAC_Init_ex(h.ctx, nil, 0, nil, nil) != 1 {
+		return fmt.Errorf("failed to reset HMAC_CTX: %w", PopError())
 	}
 	return nil
 }
 
-func (h *HMAC) Final() (result []byte, err error) {
+func (h *HMAC) Final() ([]byte, error) {
 	mdLength := C.X_EVP_MD_size(h.md)
-	result = make([]byte, mdLength)
+	result := make([]byte, mdLength)
 	if rc := C.X_HMAC_Final(h.ctx, (*C.uchar)(unsafe.Pointer(&result[0])),
 		(*C.uint)(unsafe.Pointer(&mdLength))); rc != 1 {
-		return nil, errors.New("failed to finalized HMAC")
+		return nil, fmt.Errorf("failed to final HMAC: %w", PopError())
 	}
 	return result, h.Reset()
 }

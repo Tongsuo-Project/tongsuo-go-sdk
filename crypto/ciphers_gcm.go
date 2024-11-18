@@ -18,7 +18,6 @@ package crypto
 import "C"
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -29,7 +28,7 @@ type AuthenticatedEncryptionCipherCtx interface {
 	// not encrypted itself, but is part of the authenticated data. when
 	// decrypting or authenticating, pass back with the decryption
 	// context's ExtraData()
-	ExtraData([]byte) error
+	ExtraData(extra []byte) error
 
 	// use after finalizing encryption to get the authenticating tag
 	GetTag() ([]byte, error)
@@ -40,11 +39,11 @@ type AuthenticatedDecryptionCipherCtx interface {
 
 	// pass in any extra data that was added during encryption with the
 	// encryption context's ExtraData()
-	ExtraData([]byte) error
+	ExtraData(extra []byte) error
 
 	// use before finalizing decryption to tell the library what the
 	// tag is expected to be
-	SetTag([]byte) error
+	SetTag(tag []byte) error
 }
 
 type authEncryptionCipherCtx struct {
@@ -65,13 +64,14 @@ func getGCMCipher(blocksize int) (*Cipher, error) {
 	case 128:
 		cipherptr = C.EVP_aes_128_gcm()
 	default:
-		return nil, fmt.Errorf("unknown block size %d", blocksize)
+		return nil, ErrUknownBlockSize
 	}
 	return &Cipher{ptr: cipherptr}, nil
 }
 
 func NewGCMEncryptionCipherCtx(blocksize int, e *Engine, key, iv []byte) (
-	AuthenticatedEncryptionCipherCtx, error) {
+	AuthenticatedEncryptionCipherCtx, error,
+) {
 	cipher, err := getGCMCipher(blocksize)
 	if err != nil {
 		return nil, err
@@ -83,19 +83,19 @@ func NewGCMEncryptionCipherCtx(blocksize int, e *Engine, key, iv []byte) (
 	if len(iv) > 0 {
 		err := ctx.SetCtrl(C.EVP_CTRL_GCM_SET_IVLEN, len(iv))
 		if err != nil {
-			return nil, fmt.Errorf("could not set IV len to %d: %s",
+			return nil, fmt.Errorf("could not set IV len to %d: %w",
 				len(iv), err)
 		}
-		if 1 != C.EVP_EncryptInit_ex(ctx.ctx, nil, nil, nil,
-			(*C.uchar)(&iv[0])) {
-			return nil, errors.New("failed to apply IV")
+		if C.EVP_EncryptInit_ex(ctx.ctx, nil, nil, nil, (*C.uchar)(&iv[0])) != 1 {
+			return nil, fmt.Errorf("failed to apply IV: %w", PopError())
 		}
 	}
 	return &authEncryptionCipherCtx{encryptionCipherCtx: ctx}, nil
 }
 
 func NewGCMDecryptionCipherCtx(blocksize int, e *Engine, key, iv []byte) (
-	AuthenticatedDecryptionCipherCtx, error) {
+	AuthenticatedDecryptionCipherCtx, error,
+) {
 	cipher, err := getGCMCipher(blocksize)
 	if err != nil {
 		return nil, err
@@ -107,12 +107,11 @@ func NewGCMDecryptionCipherCtx(blocksize int, e *Engine, key, iv []byte) (
 	if len(iv) > 0 {
 		err := ctx.SetCtrl(C.EVP_CTRL_GCM_SET_IVLEN, len(iv))
 		if err != nil {
-			return nil, fmt.Errorf("could not set IV len to %d: %s",
+			return nil, fmt.Errorf("could not set IV len to %d: %w",
 				len(iv), err)
 		}
-		if 1 != C.EVP_DecryptInit_ex(ctx.ctx, nil, nil, nil,
-			(*C.uchar)(&iv[0])) {
-			return nil, errors.New("failed to apply IV")
+		if C.EVP_DecryptInit_ex(ctx.ctx, nil, nil, nil, (*C.uchar)(&iv[0])) != 1 {
+			return nil, fmt.Errorf("failed to apply IV: %w", PopError())
 		}
 	}
 	return &authDecryptionCipherCtx{decryptionCipherCtx: ctx}, nil
@@ -123,9 +122,8 @@ func (ctx *authEncryptionCipherCtx) ExtraData(aad []byte) error {
 		return nil
 	}
 	var outlen C.int
-	if 1 != C.EVP_EncryptUpdate(ctx.ctx, nil, &outlen, (*C.uchar)(&aad[0]),
-		C.int(len(aad))) {
-		return errors.New("failed to add additional authenticated data")
+	if C.EVP_EncryptUpdate(ctx.ctx, nil, &outlen, (*C.uchar)(&aad[0]), C.int(len(aad))) != 1 {
+		return fmt.Errorf("failed to add additional authenticated data: %w", PopError())
 	}
 	return nil
 }
@@ -135,16 +133,15 @@ func (ctx *authDecryptionCipherCtx) ExtraData(aad []byte) error {
 		return nil
 	}
 	var outlen C.int
-	if 1 != C.EVP_DecryptUpdate(ctx.ctx, nil, &outlen, (*C.uchar)(&aad[0]),
-		C.int(len(aad))) {
-		return errors.New("failed to add additional authenticated data")
+	if C.EVP_DecryptUpdate(ctx.ctx, nil, &outlen, (*C.uchar)(&aad[0]), C.int(len(aad))) != 1 {
+		return fmt.Errorf("failed to add additional authenticated data: %w", PopError())
 	}
 	return nil
 }
 
 func (ctx *authEncryptionCipherCtx) GetTag() ([]byte, error) {
-	return ctx.GetCtrlBytes(C.EVP_CTRL_GCM_GET_TAG, GCM_TAG_MAXLEN,
-		GCM_TAG_MAXLEN)
+	return ctx.GetCtrlBytes(C.EVP_CTRL_GCM_GET_TAG, GCMTagMaxLen,
+		GCMTagMaxLen)
 }
 
 func (ctx *authDecryptionCipherCtx) SetTag(tag []byte) error {

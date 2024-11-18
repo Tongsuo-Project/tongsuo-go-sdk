@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package tongsuogo_test
 
 import (
 	"bytes"
 	"crypto/rand"
 	"crypto/tls"
 	"io"
-	"io/ioutil"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
+	ts "github.com/tongsuo-project/tongsuo-go-sdk"
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"github.com/tongsuo-project/tongsuo-go-sdk/utils"
 )
 
-var (
-	certBytes = []byte(`-----BEGIN CERTIFICATE-----
+const (
+	certBytes = `-----BEGIN CERTIFICATE-----
 MIIExjCCAy6gAwIBAgIRAMqZUO0eR6sVZ3A8iG8bJK8wDQYJKoZIhvcNAQELBQAw
 ezEeMBwGA1UEChMVbWtjZXJ0IGRldmVsb3BtZW50IENBMSgwJgYDVQQLDB90b21z
 YXd5ZXJAQi1GRzc5TUw3SC0wNDQ4LmxvY2FsMS8wLQYDVQQDDCZta2NlcnQgdG9t
@@ -58,8 +58,8 @@ UjxAjLXvWmij6ilpMADnLQA0SH6s+9E2Aa5LTpEMDqXORcu+sq5/m3RuDtVxuYdU
 HNnVAmIdTLKC9CWnRfDxH8zPgIr/L8Yhdw92YST8hNqGQHeR0qoBcKYMHkpH6Ay4
 yuKERO5LaAmjoXJW3n5Zal6jogf3wpiV1o4=
 -----END CERTIFICATE-----
-`)
-	keyBytes = []byte(`-----BEGIN RSA PRIVATE KEY-----
+`
+	keyBytes = `-----BEGIN RSA PRIVATE KEY-----
 MIIG5AIBAAKCAYEAwoj05U9j+Y8xGs8xV9n0+6U6KJSS6eMn9xL4CW9qoxbpmNXw
 ZNqujLWH0LrceF34X6vqG3U6mrhQKt2g4ywWGOmxQk9OuJqwHrVFPZyheiS4zxwU
 D/CnsZ5cq1aOKH/PamWnaafNylBdj33o3CQXZBRkiYNandJGPjQsVjfI6I08y2RO
@@ -98,83 +98,65 @@ JBfFkFXDvcbaYmpcOVCS1susPrPr8rgIm+vK6X+UoWE1RcCMGQMKObQIDGpE4IWe
 TDoukqQ8peoffk6mtiCnph9Cl2uqAgmmX+GyunEMIdF/ySG0CCcfz180GsQCucax
 +AxW2R7NJMAHvfeaYoLtSMYEVTS8sSpuIbRTfGuxbmMOD8a03gU6AA==
 -----END RSA PRIVATE KEY-----
-`)
-	prime256v1KeyBytes = []byte(`-----BEGIN EC PRIVATE KEY-----
-MHcCAQEEIB/XL0zZSsAu+IQF1AI/nRneabb2S126WFlvvhzmYr1KoAoGCCqGSM49
-AwEHoUQDQgAESSFGWwF6W1hoatKGPPorh4+ipyk0FqpiWdiH+4jIiU39qtOeZGSh
-1QgSbzfdHxvoYI0FXM+mqE7wec0kIvrrHw==
------END EC PRIVATE KEY-----
-`)
-	prime256v1CertBytes = []byte(`-----BEGIN CERTIFICATE-----
-MIIChTCCAiqgAwIBAgIJAOQII2LQl4uxMAoGCCqGSM49BAMCMIGcMQswCQYDVQQG
-EwJVUzEPMA0GA1UECAwGS2Fuc2FzMRAwDgYDVQQHDAdOb3doZXJlMR8wHQYDVQQK
-DBZGYWtlIENlcnRpZmljYXRlcywgSW5jMUkwRwYDVQQDDEBhMWJkZDVmZjg5ZjQy
-N2IwZmNiOTdlNDMyZTY5Nzg2NjI2ODJhMWUyNzM4MDhkODE0ZWJiZjY4ODBlYzA3
-NDljMB4XDTE3MTIxNTIwNDU1MVoXDTI3MTIxMzIwNDU1MVowgZwxCzAJBgNVBAYT
-AlVTMQ8wDQYDVQQIDAZLYW5zYXMxEDAOBgNVBAcMB05vd2hlcmUxHzAdBgNVBAoM
-FkZha2UgQ2VydGlmaWNhdGVzLCBJbmMxSTBHBgNVBAMMQGExYmRkNWZmODlmNDI3
-YjBmY2I5N2U0MzJlNjk3ODY2MjY4MmExZTI3MzgwOGQ4MTRlYmJmNjg4MGVjMDc0
-OWMwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARJIUZbAXpbWGhq0oY8+iuHj6Kn
-KTQWqmJZ2If7iMiJTf2q055kZKHVCBJvN90fG+hgjQVcz6aoTvB5zSQi+usfo1Mw
-UTAdBgNVHQ4EFgQUfRYAFhlGM1wzvusyGrm26Vrbqm4wHwYDVR0jBBgwFoAUfRYA
-FhlGM1wzvusyGrm26Vrbqm4wDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNJ
-ADBGAiEA6PWNjm4B6zs3Wcha9qyDdfo1ILhHfk9rZEAGrnfyc2UCIQD1IDVJUkI4
-J/QVoOtP5DOdRPs/3XFy0Bk0qH+Uj5D7LQ==
------END CERTIFICATE-----
-`)
-	ed25519CertBytes = []byte(`-----BEGIN CERTIFICATE-----
-MIIBIzCB1gIUd0UUPX+qHrSKSVN9V/A3F1Eeti4wBQYDK2VwMDYxCzAJBgNVBAYT
-AnVzMQ0wCwYDVQQKDARDU0NPMRgwFgYDVQQDDA9lZDI1NTE5X3Jvb3RfY2EwHhcN
-MTgwODE3MDMzNzQ4WhcNMjgwODE0MDMzNzQ4WjAzMQswCQYDVQQGEwJ1czENMAsG
-A1UECgwEQ1NDTzEVMBMGA1UEAwwMZWQyNTUxOV9sZWFmMCowBQYDK2VwAyEAKZZJ
-zzlBcpjdbvzV0BRoaSiJKxbU6GnFeAELA0cHWR0wBQYDK2VwA0EAbfUJ7L7v3GDq
-Gv7R90wQ/OKAc+o0q9eOrD6KRYDBhvlnMKqTMRVucnHXfrd5Rhmf4yHTvFTOhwmO
-t/hpmISAAA==
------END CERTIFICATE-----
-`)
-	ed25519KeyBytes = []byte(`-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIL3QVwyuusKuLgZwZn356UHk9u1REGHbNTLtFMPKNQSb
------END PRIVATE KEY-----
-`)
+`
 )
 
 // NetPipe creates a TCP connection pipe and returns two connections.
-func NetPipe(t testing.TB) (net.Conn, net.Conn) {
-	l, err := net.Listen("tcp", "localhost:0")
+func NetPipe(tb testing.TB) (net.Conn, net.Conn) {
+	tb.Helper()
+
+	lis, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	defer l.Close()
+	defer lis.Close()
 
 	// Use Future pattern to create client connection asynchronously
 	clientFuture := utils.NewFuture()
 	go func() {
-		clientFuture.Set(net.Dial(l.Addr().Network(), l.Addr().String()))
+		clientFuture.Set(net.Dial(lis.Addr().Network(), lis.Addr().String()))
 	}()
 
-	var errs utils.ErrorGroup
-	serverConn, err := l.Accept()
+	var (
+		errs utils.ErrorGroup
+		conn net.Conn
+		ok   bool
+	)
+
+	serverConn, err := lis.Accept()
 	errs.Add(err)
 	clientConn, err := clientFuture.Get()
 	errs.Add(err)
 
-	err = errs.Finalize()
-	if err != nil {
-		if serverConn != nil {
-			err := serverConn.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
+	if clientConn != nil {
+		conn, ok = clientConn.(net.Conn)
+		if !ok {
+			tb.Fatal("clientConn is not a net.Conn")
 		}
-		if clientConn != nil {
-			err := clientConn.(net.Conn).Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-		t.Fatal(err)
 	}
-	return serverConn, clientConn.(net.Conn)
+
+	err = errs.Finalize()
+	if err == nil {
+		return serverConn, conn
+	}
+
+	if serverConn != nil {
+		err := serverConn.Close()
+		if err != nil {
+			tb.Fatal(err)
+		}
+	}
+
+	if clientConn != nil {
+		err := conn.Close()
+		if err != nil {
+			tb.Fatal(err)
+		}
+	}
+
+	tb.Fatal(err)
+
+	return nil, nil
 }
 
 // HandshakingConn interface extends net.Conn interface with Handshake method.
@@ -184,20 +166,23 @@ type HandshakingConn interface {
 }
 
 // SimpleConnTest tests simple SSL/TLS connections.
-func SimpleConnTest(t testing.TB, constructor func(
-	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn)) {
+func SimpleConnTest(tb testing.TB, constructor func(
+	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn),
+) {
+	tb.Helper()
 	// Create network pipe
-	serverConn, clientConn := NetPipe(t)
+	serverConn, clientConn := NetPipe(tb)
 	defer serverConn.Close()
 	defer clientConn.Close()
 
 	data := "first test string\n"
 
 	// Create SSL/TLS connections using provided constructor
-	server, client := constructor(t, serverConn, clientConn)
+	server, client := constructor(tb, serverConn, clientConn)
 	defer closeBoth(server, client)
 
 	var wg sync.WaitGroup
+
 	wg.Add(2)
 
 	go func() {
@@ -205,17 +190,17 @@ func SimpleConnTest(t testing.TB, constructor func(
 
 		err := client.Handshake()
 		if err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 
 		_, err = io.Copy(client, bytes.NewReader([]byte(data)))
 		if err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 
 		err = client.Close()
 		if err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 	}()
 
@@ -225,18 +210,19 @@ func SimpleConnTest(t testing.TB, constructor func(
 
 		err := server.Handshake()
 		if err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 
 		buf := bytes.NewBuffer(make([]byte, 0, len(data)))
+
 		_, err = io.CopyN(buf, server, int64(len(data)))
 		if err != nil {
-			t.Fatal(err)
-		}
-		if string(buf.Bytes()) != data {
-			t.Fatal("mismatched data")
+			tb.Fatal(err)
 		}
 
+		if buf.String() != data {
+			tb.Fatal("mismatched data")
+		}
 	}()
 	wg.Wait()
 }
@@ -244,7 +230,9 @@ func SimpleConnTest(t testing.TB, constructor func(
 // closeBoth closes two connections.
 func closeBoth(closer1, closer2 io.Closer) {
 	var wg sync.WaitGroup
+
 	wg.Add(2)
+
 	go func() {
 		defer wg.Done()
 		closer1.Close()
@@ -257,15 +245,18 @@ func closeBoth(closer1, closer2 io.Closer) {
 }
 
 // ClosingTest tests connection closing scenarios.
-func ClosingTest(t testing.TB, constructor func(
-	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn)) {
+func ClosingTest(tb testing.TB, constructor func(
+	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn),
+) {
+	tb.Helper()
 
 	runTest := func(serverWrites bool) {
 		// Create network pipe
-		serverConn, clientConn := NetPipe(t)
+		serverConn, clientConn := NetPipe(tb)
 		defer serverConn.Close()
 		defer clientConn.Close()
-		server, client := constructor(t, serverConn, clientConn)
+
+		server, client := constructor(tb, serverConn, clientConn)
 		defer closeBoth(server, client)
 
 		// Determine who writes and who reads based on server_writes parameter
@@ -279,13 +270,15 @@ func ClosingTest(t testing.TB, constructor func(
 		}
 
 		var wg sync.WaitGroup
+
 		wg.Add(2)
 
 		go func() {
 			defer wg.Done()
+
 			_, err := sslconn1.Write([]byte("hello"))
 			if err != nil {
-				t.Fatal(err)
+				tb.Fatal(err)
 			}
 
 			sslconn1.Close()
@@ -293,12 +286,14 @@ func ClosingTest(t testing.TB, constructor func(
 
 		go func() {
 			defer wg.Done()
+
 			data, err := io.ReadAll(sslconn2)
 			if err != nil {
-				t.Fatal(err)
+				tb.Fatal(err)
 			}
+
 			if !bytes.Equal(data, []byte("hello")) {
-				t.Fatal("bytes don't match")
+				tb.Fatal("bytes don't match")
 			}
 		}()
 
@@ -312,7 +307,9 @@ func ClosingTest(t testing.TB, constructor func(
 
 // ThroughputBenchmark benchmarks SSL/TLS connection throughput.
 func ThroughputBenchmark(b *testing.B, constructor func(
-	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn)) {
+	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn),
+) {
+	b.Helper()
 	// Create network pipe
 	serverConn, clientConn := NetPipe(b)
 	defer serverConn.Close()
@@ -325,18 +322,22 @@ func ThroughputBenchmark(b *testing.B, constructor func(
 	// Set benchmark parameters
 	b.SetBytes(1024)
 	data := make([]byte, b.N*1024)
-	_, err := io.ReadFull(rand.Reader, data[:])
+
+	_, err := io.ReadFull(rand.Reader, data)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.ResetTimer()
+
 	var wg sync.WaitGroup
+
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		_, err = io.Copy(client, bytes.NewReader([]byte(data)))
+
+		_, err = io.Copy(client, bytes.NewReader(data))
 		if err != nil {
 			b.Error(err)
 		}
@@ -346,10 +347,12 @@ func ThroughputBenchmark(b *testing.B, constructor func(
 		defer wg.Done()
 
 		buf := &bytes.Buffer{}
+
 		_, err = io.CopyN(buf, server, int64(len(data)))
 		if err != nil {
 			b.Error(err)
 		}
+
 		if !bytes.Equal(buf.Bytes(), data) {
 			b.Error("mismatched data")
 		}
@@ -359,179 +362,219 @@ func ThroughputBenchmark(b *testing.B, constructor func(
 }
 
 // StdlibConstructor creates standard library SSL/TLS connections.
-func StdlibConstructor(t testing.TB, serverConn, clientConn net.Conn) (
-	server, client HandshakingConn) {
-	cert, err := tls.X509KeyPair(certBytes, keyBytes)
+func StdlibConstructor(tb testing.TB, serverConn, clientConn net.Conn) (HandshakingConn, HandshakingConn) {
+	tb.Helper()
+
+	cert, err := tls.X509KeyPair([]byte(certBytes), []byte(keyBytes))
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	config := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: true,
-		CipherSuites:       []uint16{tls.TLS_RSA_WITH_AES_128_CBC_SHA},
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true,
+		CipherSuites: []uint16{tls.TLS_RSA_WITH_AES_128_CBC_SHA},
 	}
-	server = tls.Server(serverConn, config)
-	client = tls.Client(clientConn, config)
+
+	server := tls.Server(serverConn, tlsConfig)
+	client := tls.Client(clientConn, tlsConfig)
+
 	return server, client
 }
 
 // StdlibTLSv13Constructor creates standard library SSL/TLS connections with TLSv1.3.
-func StdlibTLSv13Constructor(t testing.TB, serverConn, clientConn net.Conn) (
-	server, client HandshakingConn) {
-	cert, err := tls.X509KeyPair(certBytes, keyBytes)
+func StdlibTLSv13Constructor(tb testing.TB, serverConn, clientConn net.Conn) (HandshakingConn, HandshakingConn) {
+	tb.Helper()
+
+	cert, err := tls.X509KeyPair([]byte(certBytes), []byte(keyBytes))
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	config := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: true,
-		MinVersion:         tls.VersionTLS13,
-		MaxVersion:         tls.VersionTLS13,
-	}
-	server = tls.Server(serverConn, config)
-	client = tls.Client(clientConn, config)
+
+	tlsConfig := &tls.Config{}
+	tlsConfig.Certificates = []tls.Certificate{cert}
+	tlsConfig.InsecureSkipVerify = true
+	tlsConfig.MinVersion = tls.VersionTLS13
+	tlsConfig.MaxVersion = tls.VersionTLS13
+
+	server := tls.Server(serverConn, tlsConfig)
+	client := tls.Client(clientConn, tlsConfig)
+
 	return server, client
 }
 
 // passThruVerify is used to pass through certificate verification.
-func passThruVerify(t testing.TB) func(bool, *CertificateStoreCtx) bool {
-	x := func(ok bool, store *CertificateStoreCtx) bool {
+func passThruVerify(tb testing.TB) func(bool, *ts.CertificateStoreCtx) bool {
+	tb.Helper()
+
+	check := func(ok bool, store *ts.CertificateStoreCtx) bool {
 		cert := store.GetCurrentCert()
 		if cert == nil {
-			t.Fatalf("Could not obtain cert from store\n")
+			tb.Fatalf("Could not obtain cert from store\n")
 		}
+
 		sn := cert.GetSerialNumberHex()
 		if len(sn) == 0 {
-			t.Fatalf("Could not obtain serial number from cert")
+			tb.Fatalf("Could not obtain serial number from cert")
 		}
+
 		return ok
 	}
-	return x
+
+	return check
 }
 
 // OpenSSLConstructor creates OpenSSL SSL/TLS connections.
-func OpenSSLConstructor(t testing.TB, serverConn, clientConn net.Conn) (
-	server, client HandshakingConn) {
-	ctx, err := NewCtx()
+func OpenSSLConstructor(tb testing.TB, serverConn, clientConn net.Conn) (HandshakingConn, HandshakingConn) {
+	tb.Helper()
+
+	ctx, err := ts.NewCtx()
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	ctx.SetVerify(VerifyNone, passThruVerify(t))
-	key, err := crypto.LoadPrivateKeyFromPEM(keyBytes)
+
+	ctx.SetVerify(ts.VerifyNone, passThruVerify(tb))
+
+	key, err := crypto.LoadPrivateKeyFromPEM([]byte(keyBytes))
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	err = ctx.UsePrivateKey(key)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	cert, err := crypto.LoadCertificateFromPEM(certBytes)
+
+	cert, err := crypto.LoadCertificateFromPEM([]byte(certBytes))
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	err = ctx.UseCertificate(cert)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	err = ctx.SetCipherList("AES128-SHA")
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	server, err = Server(serverConn, ctx)
+
+	server, err := ts.Server(serverConn, ctx)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	client, err = Client(clientConn, ctx)
+
+	client, err := ts.Client(clientConn, ctx)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	return server, client
 }
 
 // OpenSSLTLSv3Constructor function is used to create SSL/TLS connections for OpenSSL and TLSv3.
-func OpenSSLTLSv3Constructor(t testing.TB, serverConn, clientConn net.Conn) (
-	server, client HandshakingConn) {
-	ctx, err := NewCtxWithVersion(SSLv3)
+func OpenSSLTLSv3Constructor(tb testing.TB, serverConn, clientConn net.Conn) (HandshakingConn, HandshakingConn) {
+	tb.Helper()
+
+	ctx, err := ts.NewCtxWithVersion(ts.SSLv3)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	ctx.SetVerify(VerifyNone, passThruVerify(t))
-	key, err := crypto.LoadPrivateKeyFromPEM(keyBytes)
+
+	ctx.SetVerify(ts.VerifyNone, passThruVerify(tb))
+
+	key, err := crypto.LoadPrivateKeyFromPEM([]byte(keyBytes))
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	err = ctx.UsePrivateKey(key)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	cert, err := crypto.LoadCertificateFromPEM(certBytes)
+
+	cert, err := crypto.LoadCertificateFromPEM([]byte(certBytes))
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	err = ctx.UseCertificate(cert)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	err = ctx.SetCipherList("AES128-SHA")
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	server, err = Server(serverConn, ctx)
+
+	server, err := ts.Server(serverConn, ctx)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	client, err = Client(clientConn, ctx)
+
+	client, err := ts.Client(clientConn, ctx)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	return server, client
 }
 
 // StdlibOpenSSLConstructor function is used to create SSL/TLS connections for the standard library and OpenSSL.
-func StdlibOpenSSLConstructor(t testing.TB, serverConn, clientConn net.Conn) (
-	server, client HandshakingConn) {
-	serverStd, _ := StdlibConstructor(t, serverConn, clientConn)
-	_, clientSsl := OpenSSLConstructor(t, serverConn, clientConn)
+func StdlibOpenSSLConstructor(tb testing.TB, serverConn, clientConn net.Conn) (HandshakingConn, HandshakingConn) {
+	tb.Helper()
+
+	serverStd, _ := StdlibConstructor(tb, serverConn, clientConn)
+	_, clientSsl := OpenSSLConstructor(tb, serverConn, clientConn)
+
 	return serverStd, clientSsl
 }
 
 // OpenSSLStdlibConstructor function is used to create SSL/TLS connections for OpenSSL and the standard library.
-func OpenSSLStdlibConstructor(t testing.TB, serverConn, clientConn net.Conn) (
-	server, client HandshakingConn) {
-	_, clientStd := StdlibConstructor(t, serverConn, clientConn)
-	serverSsl, _ := OpenSSLConstructor(t, serverConn, clientConn)
+func OpenSSLStdlibConstructor(tb testing.TB, serverConn, clientConn net.Conn) (HandshakingConn, HandshakingConn) {
+	tb.Helper()
+
+	_, clientStd := StdlibConstructor(tb, serverConn, clientConn)
+	serverSsl, _ := OpenSSLConstructor(tb, serverConn, clientConn)
+
 	return serverSsl, clientStd
 }
 
 // TestStdlibSimple function is used to test simple connections of the standard library.
 func TestStdlibSimple(t *testing.T) {
+	t.Parallel()
 	SimpleConnTest(t, StdlibConstructor)
 }
 
 // TestStdlibTLSv13Simple function is used to test simple connections of the standard library with TLSv1.3.
 func TestStdlibTLSv13Simple(t *testing.T) {
+	t.Parallel()
 	SimpleConnTest(t, StdlibTLSv13Constructor)
 }
 
 // TestOpenSSLSimple function is used to test simple connections of OpenSSL.
 func TestOpenSSLSimple(t *testing.T) {
+	t.Parallel()
 	SimpleConnTest(t, OpenSSLConstructor)
 }
 
 // TestStdlibClosing function is used to test closing connections of the standard library.
 func TestStdlibClosing(t *testing.T) {
+	t.Parallel()
 	ClosingTest(t, StdlibConstructor)
 }
 
 // TestStdlibTLSv13Closing function is used to test closing connections of the standard library with TLSv1.3.
 func TestStdlibTLSv13Closing(t *testing.T) {
+	t.Parallel()
 	ClosingTest(t, StdlibTLSv13Constructor)
 }
 
-// TODO fix this
-//func TestOpenSSLClosing(t *testing.T) {
-//	ClosingTest(t, OpenSSLConstructor)
-//}
+func TestOpenSSLClosing(t *testing.T) {
+	t.Parallel()
+	ClosingTest(t, OpenSSLConstructor)
+}
 
 // BenchmarkStdlibThroughput function is used to benchmark the throughput of the standard library.
 func BenchmarkStdlibThroughput(b *testing.B) {
@@ -550,21 +593,25 @@ func BenchmarkOpenSSLThroughput(b *testing.B) {
 
 // TestStdlibOpenSSLSimple function is used to test simple connections of the standard library and OpenSSL.
 func TestStdlibOpenSSLSimple(t *testing.T) {
+	t.Parallel()
 	SimpleConnTest(t, StdlibOpenSSLConstructor)
 }
 
 // TestOpenSSLStdlibSimple function is used to test simple connections of OpenSSL and the standard library.
 func TestOpenSSLStdlibSimple(t *testing.T) {
+	t.Parallel()
 	SimpleConnTest(t, OpenSSLStdlibConstructor)
 }
 
 // TestStdlibOpenSSLClosing function is used to test closing connections of the standard library and OpenSSL.
 func TestStdlibOpenSSLClosing(t *testing.T) {
+	t.Parallel()
 	ClosingTest(t, StdlibOpenSSLConstructor)
 }
 
 // TestOpenSSLStdlibClosing function is used to test closing connections of OpenSSL and the standard library.
 func TestOpenSSLStdlibClosing(t *testing.T) {
+	t.Parallel()
 	ClosingTest(t, OpenSSLStdlibConstructor)
 }
 
@@ -579,10 +626,14 @@ func BenchmarkOpenSSLStdlibThroughput(b *testing.B) {
 }
 
 // FullDuplexRenegotiationTest function is used to test full-duplex renegotiation.
-func FullDuplexRenegotiationTest(t testing.TB, constructor func(
-	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn)) {
+func FullDuplexRenegotiationTest(tb testing.TB, constructor func(
+	t testing.TB, conn1, conn2 net.Conn) (sslconn1, sslconn2 HandshakingConn),
+) {
+	tb.Helper()
+
 	SSLRecordSize := 16 * 1024
-	serverConn, clientConn := NetPipe(t)
+
+	serverConn, clientConn := NetPipe(tb)
 	defer serverConn.Close()
 	defer clientConn.Close()
 
@@ -590,38 +641,45 @@ func FullDuplexRenegotiationTest(t testing.TB, constructor func(
 	times := 256
 	dataLen := 4 * SSLRecordSize
 	data1 := make([]byte, dataLen)
-	_, err := io.ReadFull(rand.Reader, data1[:])
+
+	_, err := io.ReadFull(rand.Reader, data1)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	data2 := make([]byte, dataLen)
-	_, err = io.ReadFull(rand.Reader, data1[:])
+
+	_, err = io.ReadFull(rand.Reader, data2)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 
 	// Create SSL/TLS connections
-	server, client := constructor(t, serverConn, clientConn)
+	server, client := constructor(tb, serverConn, clientConn)
 	defer closeBoth(server, client)
 
 	var wg sync.WaitGroup
 
 	sendFunc := func(sender HandshakingConn, data []byte) {
 		defer wg.Done()
+
 		for i := 0; i < times; i++ {
 			if i == times/2 {
 				wg.Add(1)
+
 				go func() {
 					defer wg.Done()
+
 					err := sender.Handshake()
 					if err != nil {
-						t.Fatal(err)
+						tb.Fatal(err)
 					}
 				}()
 			}
+
 			_, err := sender.Write(data)
 			if err != nil {
-				t.Fatal(err)
+				tb.Fatal(err)
 			}
 		}
 	}
@@ -631,17 +689,19 @@ func FullDuplexRenegotiationTest(t testing.TB, constructor func(
 
 		buf := make([]byte, len(data))
 		for i := 0; i < times; i++ {
-			n, err := io.ReadFull(receiver, buf[:])
+			n, err := io.ReadFull(receiver, buf)
 			if err != nil {
-				t.Fatal(err)
+				tb.Fatal(err)
 			}
+
 			if !bytes.Equal(buf[:n], data) {
-				t.Fatal(err)
+				tb.Fatal(err)
 			}
 		}
 	}
 
 	wg.Add(4)
+
 	go recvFunc(server, data1)
 	go sendFunc(client, data1)
 	go sendFunc(server, data2)
@@ -651,125 +711,150 @@ func FullDuplexRenegotiationTest(t testing.TB, constructor func(
 
 // TestStdlibFullDuplexRenegotiation function is used to test full-duplex renegotiation of the standard library.
 func TestStdlibFullDuplexRenegotiation(t *testing.T) {
+	t.Parallel()
 	FullDuplexRenegotiationTest(t, StdlibConstructor)
-}
-
-// TestStdlibTLSv13FullDuplexRenegotiation function is used to test full-duplex renegotiation of the standard library with TLSv1.3.
-func TestStdlibTLSv13FullDuplexRenegotiation(t *testing.T) {
-	FullDuplexRenegotiationTest(t, StdlibTLSv13Constructor)
 }
 
 // TestOpenSSLFullDuplexRenegotiation function is used to test full-duplex renegotiation of OpenSSL.
 func TestOpenSSLFullDuplexRenegotiation(t *testing.T) {
+	t.Parallel()
 	FullDuplexRenegotiationTest(t, OpenSSLConstructor)
 }
 
-// TestOpenSSLStdlibFullDuplexRenegotiation function is used to test full-duplex renegotiation of OpenSSL and the standard library.
+// TestOpenSSLStdlibFullDuplexRenegotiation function is used to test full-duplex renegotiation of OpenSSL and the
+// standard library.
 func TestOpenSSLStdlibFullDuplexRenegotiation(t *testing.T) {
+	t.Parallel()
 	FullDuplexRenegotiationTest(t, OpenSSLStdlibConstructor)
 }
 
-// TestStdlibOpenSSLFullDuplexRenegotiation function is used to test full-duplex renegotiation of the standard library and OpenSSL.
+// TestStdlibOpenSSLFullDuplexRenegotiation function is used to test full-duplex renegotiation of the standard library
+// and OpenSSL.
 func TestStdlibOpenSSLFullDuplexRenegotiation(t *testing.T) {
+	t.Parallel()
 	FullDuplexRenegotiationTest(t, StdlibOpenSSLConstructor)
+}
+
+func startTLSServer(t *testing.T, sslListener net.Listener, payloadSize int64, loops int, sleep time.Duration) {
+	t.Helper()
+
+	for {
+		conn, err := sslListener.Accept()
+		if err != nil {
+			t.Error("failed to accept: ", err)
+			continue
+		}
+
+		go func() {
+			defer func() {
+				err = conn.Close()
+				if err != nil {
+					t.Error("failed to close: ", err)
+				}
+			}()
+
+			for i := 0; i < loops; i++ {
+				_, err := io.Copy(io.Discard, io.LimitReader(conn, payloadSize))
+				if err != nil {
+					t.Error("failed to read: ", err)
+					return
+				}
+
+				_, err = io.Copy(conn, io.LimitReader(rand.Reader, payloadSize))
+				if err != nil {
+					t.Error("failed to write: ", err)
+					return
+				}
+			}
+
+			time.Sleep(sleep)
+		}()
+	}
 }
 
 // LotsOfConns function is used to test the situation of a large number of connections.
 func LotsOfConns(t *testing.T, payloadSize int64, loops, clients int,
 	sleep time.Duration, newListener func(net.Listener) net.Listener,
-	newClient func(net.Conn) (net.Conn, error)) {
+	newClient func(net.Conn) (net.Conn, error),
+) {
+	t.Helper()
+
 	tcpListener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	sslListener := newListener(tcpListener)
 
-	go func() {
-		for {
-			conn, err := sslListener.Accept()
-			if err != nil {
-				t.Error("failed accept: ", err)
-				continue
-			}
-			go func() {
-				defer func() {
-					err = conn.Close()
-					if err != nil {
-						t.Error("failed closing: ", err)
-					}
-				}()
-				for i := 0; i < loops; i++ {
-					_, err := io.Copy(ioutil.Discard,
-						io.LimitReader(conn, payloadSize))
-					if err != nil {
-						t.Error("failed reading: ", err)
-						return
-					}
-					_, err = io.Copy(conn, io.LimitReader(rand.Reader,
-						payloadSize))
-					if err != nil {
-						t.Error("failed writing: ", err)
-						return
-					}
-				}
-				time.Sleep(sleep)
-			}()
-		}
-	}()
+	go startTLSServer(t, sslListener, payloadSize, loops, sleep)
 
 	// Create multiple client connections
 	var wg sync.WaitGroup
+
 	for i := 0; i < clients; i++ {
 		tcpClient, err := net.Dial(tcpListener.Addr().Network(),
 			tcpListener.Addr().String())
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		sslClient, err := newClient(tcpClient)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		wg.Add(1)
-		go func(i int) {
+
+		go func(_ int) {
 			defer func() {
 				err = sslClient.Close()
 				if err != nil {
-					t.Error("failed closing: ", err)
+					t.Error("failed to close: ", err)
 				}
+
 				wg.Done()
 			}()
+
 			for i := 0; i < loops; i++ {
 				// Write and read data
 				_, err := io.Copy(sslClient, io.LimitReader(rand.Reader,
 					payloadSize))
 				if err != nil {
-					t.Error("failed writing: ", err)
+					t.Error("failed to write: ", err)
 					return
 				}
-				_, err = io.Copy(ioutil.Discard,
+
+				_, err = io.Copy(io.Discard,
 					io.LimitReader(sslClient, payloadSize))
 				if err != nil {
-					t.Error("failed reading: ", err)
+					t.Error("failed to read: ", err)
 					return
 				}
 			}
+
 			time.Sleep(sleep)
 		}(i)
 	}
+
 	wg.Wait()
 }
 
-// TestStdlibLotsOfConns function is used to test the situation of a large number of connections of the standard library.
+// TestStdlibLotsOfConns function is used to test the situation of a large number of connections of the standard
+// library.
 func TestStdlibLotsOfConns(t *testing.T) {
+	t.Parallel()
+
 	// Load certificate and configure TLS
-	tlsCert, err := tls.X509KeyPair(certBytes, keyBytes)
+	tlsCert, err := tls.X509KeyPair([]byte(certBytes), []byte(keyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{tlsCert},
-		InsecureSkipVerify: true,
-		CipherSuites:       []uint16{tls.TLS_RSA_WITH_AES_128_CBC_SHA}}
+
+	tlsConfig := &tls.Config{}
+	tlsConfig.Certificates = []tls.Certificate{tlsCert}
+	tlsConfig.InsecureSkipVerify = true
+	tlsConfig.CipherSuites = []uint16{tls.TLS_RSA_WITH_AES_128_CBC_SHA}
+
 	// Execute large number of connections test
 	LotsOfConns(t, 1024*64, 10, 100, 0*time.Second,
 		func(l net.Listener) net.Listener {
@@ -779,19 +864,23 @@ func TestStdlibLotsOfConns(t *testing.T) {
 		})
 }
 
-// TestStdlibTLSv13LotsOfConns function is used to test the situation of a large number of connections of the standard library with TLSv1.3.
+// TestStdlibTLSv13LotsOfConns function is used to test the situation of a large number of connections of the standard
+// library with TLSv1.3.
 func TestStdlibTLSv13LotsOfConns(t *testing.T) {
+	t.Parallel()
+
 	// Load certificate and configure TLS
-	tlsCert, err := tls.X509KeyPair(certBytes, keyBytes)
+	tlsCert, err := tls.X509KeyPair([]byte(certBytes), []byte(keyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{tlsCert},
-		InsecureSkipVerify: true,
-		MinVersion:         tls.VersionTLS13,
-		MaxVersion:         tls.VersionTLS13,
-	}
+
+	tlsConfig := &tls.Config{}
+	tlsConfig.Certificates = []tls.Certificate{tlsCert}
+	tlsConfig.InsecureSkipVerify = true
+	tlsConfig.MinVersion = tls.VersionTLS13
+	tlsConfig.MaxVersion = tls.VersionTLS13
+
 	// Execute large number of connections test
 	LotsOfConns(t, 1024*64, 10, 100, 0*time.Second,
 		func(l net.Listener) net.Listener {
@@ -803,27 +892,34 @@ func TestStdlibTLSv13LotsOfConns(t *testing.T) {
 
 // TestOpenSSLLotsOfConns function is used to test the situation of a large number of connections of OpenSSL.
 func TestOpenSSLLotsOfConns(t *testing.T) {
+	t.Parallel()
+
 	// Create SSL context and configure
-	ctx, err := NewCtx()
+	ctx, err := ts.NewCtx()
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := crypto.LoadPrivateKeyFromPEM(keyBytes)
+
+	key, err := crypto.LoadPrivateKeyFromPEM([]byte(keyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = ctx.UsePrivateKey(key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cert, err := crypto.LoadCertificateFromPEM(certBytes)
+
+	cert, err := crypto.LoadCertificateFromPEM([]byte(certBytes))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = ctx.UseCertificate(cert)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = ctx.SetCipherList("AES128-SHA")
 	if err != nil {
 		t.Fatal(err)
@@ -831,8 +927,8 @@ func TestOpenSSLLotsOfConns(t *testing.T) {
 	// Execute large number of connections test
 	LotsOfConns(t, 1024*64, 10, 100, 0*time.Second,
 		func(l net.Listener) net.Listener {
-			return NewListener(l, ctx)
+			return ts.NewListener(l, ctx)
 		}, func(c net.Conn) (net.Conn, error) {
-			return Client(c, ctx)
+			return ts.Client(c, ctx)
 		})
 }

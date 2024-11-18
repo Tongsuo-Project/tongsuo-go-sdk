@@ -18,10 +18,8 @@ package crypto
 import "C"
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"runtime"
@@ -29,23 +27,23 @@ import (
 	"unsafe"
 )
 
-type EVP_MD int
+type MDAlgo int
 
 const (
-	EVP_NULL      EVP_MD = iota
-	EVP_MD5       EVP_MD = iota
-	EVP_MD4       EVP_MD = iota
-	EVP_SHA       EVP_MD = iota
-	EVP_SHA1      EVP_MD = iota
-	EVP_DSS       EVP_MD = iota
-	EVP_DSS1      EVP_MD = iota
-	EVP_MDC2      EVP_MD = iota
-	EVP_RIPEMD160 EVP_MD = iota
-	EVP_SHA224    EVP_MD = iota
-	EVP_SHA256    EVP_MD = iota
-	EVP_SHA384    EVP_MD = iota
-	EVP_SHA512    EVP_MD = iota
-	EVP_SM3       EVP_MD = iota
+	MDNull      MDAlgo = iota
+	MDMD5       MDAlgo = iota
+	MDMD4       MDAlgo = iota
+	MDSHA       MDAlgo = iota
+	MDSHA1      MDAlgo = iota
+	MDDSS       MDAlgo = iota
+	MDDSS1      MDAlgo = iota
+	MDMDC2      MDAlgo = iota
+	MDRipemd160 MDAlgo = iota
+	MDSHA224    MDAlgo = iota
+	MDSHA256    MDAlgo = iota
+	MDSHA384    MDAlgo = iota
+	MDSHA512    MDAlgo = iota
+	MDSM3       MDAlgo = iota
 )
 
 type GMDoubleCertKey struct {
@@ -55,14 +53,14 @@ type GMDoubleCertKey struct {
 	EncKeyFile   string
 }
 
-// X509_Version represents a version on a x509 certificate.
-type X509_Version int
+// X509Version represents a version on a x509 certificate.
+type X509Version int
 
 // Specify constants for x509 versions because the standard states that they
 // are represented internally as one lower than the common version name.
 const (
-	X509_V1 X509_Version = 0
-	X509_V3 X509_Version = 2
+	X509V1 X509Version = 0
+	X509V3 X509Version = 2
 )
 
 type Certificate struct {
@@ -88,35 +86,40 @@ type Name struct {
 func NewCertWrapper(x unsafe.Pointer, ref ...interface{}) *Certificate {
 	if len(ref) > 0 {
 		return &Certificate{x: (*C.X509)(x), ref: ref[0]}
-	} else {
-		return &Certificate{x: (*C.X509)(x)}
 	}
+
+	return &Certificate{x: (*C.X509)(x)}
 }
 
 // NewName allocate and return a new Name object.
 func NewName() (*Name, error) {
 	n := C.X509_NAME_new()
 	if n == nil {
-		return nil, errors.New("could not create x509 name")
+		return nil, fmt.Errorf("could not create x509 name: %w", ErrMallocFailure)
 	}
 	name := &Name{name: n}
 	runtime.SetFinalizer(name, func(n *Name) {
 		C.X509_NAME_free(n.name)
 	})
+
 	return name, nil
 }
 
 // AddTextEntry appends a text entry to an X509 NAME.
 func (n *Name) AddTextEntry(field, value string) error {
 	cfield := C.CString(field)
+
 	defer C.free(unsafe.Pointer(cfield))
+
 	cvalue := (*C.uchar)(unsafe.Pointer(C.CString(value)))
+
 	defer C.free(unsafe.Pointer(cvalue))
-	ret := C.X509_NAME_add_entry_by_txt(
-		n.name, cfield, C.MBSTRING_ASC, cvalue, -1, -1, 0)
+
+	ret := C.X509_NAME_add_entry_by_txt(n.name, cfield, C.MBSTRING_ASC, cvalue, -1, -1, 0)
 	if ret != 1 {
-		return errors.New("failed to add x509 name text entry")
+		return fmt.Errorf("failed to add x509 name text entry: %w", PopError())
 	}
+
 	return nil
 }
 
@@ -132,7 +135,7 @@ func (n *Name) AddTextEntries(entries map[string]string) error {
 
 // GetEntry returns a name entry based on NID.  If no entry, then ("", false) is
 // returned.
-func (n *Name) GetEntry(nid NID) (entry string, ok bool) {
+func (n *Name) GetEntry(nid NID) (string, bool) {
 	entrylen := C.X509_NAME_get_text_by_NID(n.name, C.int(nid), nil, 0)
 	if entrylen == -1 {
 		return "", false
@@ -146,14 +149,14 @@ func (n *Name) GetEntry(nid NID) (entry string, ok bool) {
 // NewCertificate generates a basic certificate based
 // on the provided CertificateInfo struct
 func NewCertificate(info *CertificateInfo, key PublicKey) (*Certificate, error) {
-	c := &Certificate{x: C.X509_new()}
-	runtime.SetFinalizer(c, func(c *Certificate) {
+	cert := &Certificate{x: C.X509_new()}
+	runtime.SetFinalizer(cert, func(c *Certificate) {
 		C.X509_free(c.x)
 	})
-	if err := c.SetVersion(X509_V3); err != nil {
+	if err := cert.SetVersion(X509V3); err != nil {
 		return nil, err
 	}
-	name, err := c.GetSubjectName()
+	name, err := cert.GetSubjectName()
 	if err != nil {
 		return nil, err
 	}
@@ -166,22 +169,22 @@ func NewCertificate(info *CertificateInfo, key PublicKey) (*Certificate, error) 
 		return nil, err
 	}
 	// self-issue for now
-	if err := c.SetIssuerName(name); err != nil {
+	if err := cert.SetIssuerName(name); err != nil {
 		return nil, err
 	}
-	if err := c.SetSerial(info.Serial); err != nil {
+	if err := cert.SetSerial(info.Serial); err != nil {
 		return nil, err
 	}
-	if err := c.SetIssueDate(info.Issued); err != nil {
+	if err := cert.SetIssueDate(info.Issued); err != nil {
 		return nil, err
 	}
-	if err := c.SetExpireDate(info.Expires); err != nil {
+	if err := cert.SetExpireDate(info.Expires); err != nil {
 		return nil, err
 	}
-	if err := c.SetPubKey(key); err != nil {
+	if err := cert.SetPubKey(key); err != nil {
 		return nil, err
 	}
-	return c, nil
+	return cert, nil
 }
 
 func (c *Certificate) GetCert() *C.X509 {
@@ -191,7 +194,7 @@ func (c *Certificate) GetCert() *C.X509 {
 func (c *Certificate) GetSubjectName() (*Name, error) {
 	n := C.X509_get_subject_name(c.x)
 	if n == nil {
-		return nil, errors.New("failed to get subject name")
+		return nil, fmt.Errorf("failed to get subject name: %w", ErrNilParameter)
 	}
 	return &Name{name: n}, nil
 }
@@ -199,14 +202,14 @@ func (c *Certificate) GetSubjectName() (*Name, error) {
 func (c *Certificate) GetIssuerName() (*Name, error) {
 	n := C.X509_get_issuer_name(c.x)
 	if n == nil {
-		return nil, errors.New("failed to get issuer name")
+		return nil, fmt.Errorf("failed to get issuer name: %w", ErrNilParameter)
 	}
 	return &Name{name: n}, nil
 }
 
 func (c *Certificate) SetSubjectName(name *Name) error {
 	if C.X509_set_subject_name(c.x, name.name) != 1 {
-		return errors.New("failed to set subject name")
+		return fmt.Errorf("failed to set subject name: %w", PopError())
 	}
 	return nil
 }
@@ -230,7 +233,7 @@ func (c *Certificate) SetIssuer(issuer *Certificate) error {
 // Use SetIssuer instead, if possible.
 func (c *Certificate) SetIssuerName(name *Name) error {
 	if C.X509_set_issuer_name(c.x, name.name) != 1 {
-		return errors.New("failed to set subject name")
+		return fmt.Errorf("failed to set subject name: %w", PopError())
 	}
 	return nil
 }
@@ -244,13 +247,13 @@ func (c *Certificate) SetSerial(serial *big.Int) error {
 
 	serialBytes := serial.Bytes()
 	if bn = C.BN_bin2bn((*C.uchar)(unsafe.Pointer(&serialBytes[0])), C.int(len(serialBytes)), bn); bn == nil {
-		return errors.New("failed to set serial")
+		return fmt.Errorf("failed to set serial: %w", PopError())
 	}
 	if sno = C.BN_to_ASN1_INTEGER(bn, sno); sno == nil {
-		return errors.New("failed to set serial")
+		return fmt.Errorf("failed to set serial: %w", PopError())
 	}
 	if C.X509_set_serialNumber(c.x, sno) != 1 {
-		return errors.New("failed to set serial")
+		return fmt.Errorf("failed to set serial: %w", PopError())
 	}
 	return nil
 }
@@ -260,7 +263,7 @@ func (c *Certificate) SetIssueDate(when time.Duration) error {
 	offset := C.long(when / time.Second)
 	result := C.X509_gmtime_adj(C.X_X509_get0_notBefore(c.x), offset)
 	if result == nil {
-		return errors.New("failed to set issue date")
+		return fmt.Errorf("failed to set issue date: %w", PopError())
 	}
 	return nil
 }
@@ -270,7 +273,7 @@ func (c *Certificate) SetExpireDate(when time.Duration) error {
 	offset := C.long(when / time.Second)
 	result := C.X509_gmtime_adj(C.X_X509_get0_notAfter(c.x), offset)
 	if result == nil {
-		return errors.New("failed to set expire date")
+		return fmt.Errorf("failed to set expire date: %w", PopError())
 	}
 	return nil
 }
@@ -279,30 +282,29 @@ func (c *Certificate) SetExpireDate(when time.Duration) error {
 func (c *Certificate) SetPubKey(pubKey PublicKey) error {
 	c.pubKey = pubKey
 	if C.X509_set_pubkey(c.x, pubKey.EvpPKey()) != 1 {
-		return errors.New("failed to set public key")
+		return fmt.Errorf("failed to set public key: %w", PopError())
 	}
 	return nil
 }
 
 // Sign a certificate using a private key and a digest name.
 // Accepted digest names are 'sm3', 'sha256', 'sha384', and 'sha512'.
-func (c *Certificate) Sign(privKey PrivateKey, digest EVP_MD) error {
+func (c *Certificate) Sign(privKey PrivateKey, digest MDAlgo) error {
 	switch digest {
-	case EVP_SM3:
-	case EVP_SHA256:
-	case EVP_SHA384:
-	case EVP_SHA512:
+	case MDSM3:
+	case MDSHA256:
+	case MDSHA384:
+	case MDSHA512:
 	default:
-		return errors.New("Unsupported digest" +
-			"You're probably looking for 'EVP_SHA256' or 'EVP_SHA512'.")
+		return ErrUnsupportedDigest
 	}
 	return c.insecureSign(privKey, digest)
 }
 
-func (c *Certificate) insecureSign(privKey PrivateKey, digest EVP_MD) error {
+func (c *Certificate) insecureSign(privKey PrivateKey, digest MDAlgo) error {
 	var md *C.EVP_MD = getDigestFunction(digest)
 	if C.X509_sign(c.x, privKey.EvpPKey(), md) <= 0 {
-		return errors.New("failed to sign certificate")
+		return fmt.Errorf("failed to sign certificate: %w", PopError())
 	}
 	return nil
 }
@@ -311,13 +313,13 @@ func (c *Certificate) insecureSign(privKey PrivateKey, digest EVP_MD) error {
 // Extension constants are NID_* as found in openssl.
 func (c *Certificate) AddExtension(nid NID, value string) error {
 	if c.x == nil {
-		return errors.New("certificate is nil")
+		return fmt.Errorf("certificate is nil: %w", ErrNilParameter)
 	}
 
 	issuer := c
 	if c.Issuer != nil {
 		if c.Issuer.x == nil {
-			return errors.New("issuer certificate is nil")
+			return fmt.Errorf("issuer certificate is nil: %w", ErrNilParameter)
 		}
 		issuer = c.Issuer
 	}
@@ -328,33 +330,26 @@ func (c *Certificate) AddExtension(nid NID, value string) error {
 	var ctx C.X509V3_CTX
 	C.X509V3_set_ctx(&ctx, c.x, issuer.x, nil, nil, 0)
 
-	ex := C.X509V3_EXT_conf_nid(nil, &ctx, C.int(nid), cValue)
-	if ex == nil {
-		return fmt.Errorf("failed to create x509v3 extension: %s", getOpenSSLError())
+	ext := C.X509V3_EXT_conf_nid(nil, &ctx, C.int(nid), cValue)
+	if ext == nil {
+		return fmt.Errorf("failed to create x509v3 extension: %w", PopError())
 	}
-	defer C.X509_EXTENSION_free(ex)
+	defer C.X509_EXTENSION_free(ext)
 
-	if C.X509_add_ext(c.x, ex, -1) <= 0 {
-		return fmt.Errorf("failed to add x509v3 extension: %s", getOpenSSLError())
+	if C.X509_add_ext(c.x, ext, -1) <= 0 {
+		return fmt.Errorf("failed to add x509v3 extension: %w", PopError())
 	}
 
 	return nil
 }
 
-// getOpenSSLError Get the last error from the OpenSSL error queue.
-func getOpenSSLError() string {
-	var errStrBuf [120]byte
-	C.ERR_error_string_n(C.ERR_get_error(), (*C.char)(unsafe.Pointer(&errStrBuf[0])), 120)
-	return string(errStrBuf[:])
-}
-
 // helper function to validate extension input
 func validateExtensionInput(nid NID, value string) error {
 	if nid <= 0 {
-		return errors.New("invalid NID")
+		return ErrInvalidNid
 	}
 	if value == "" {
-		return errors.New("empty extension value")
+		return ErrEmptyExtensionValue
 	}
 	return nil
 }
@@ -362,11 +357,12 @@ func validateExtensionInput(nid NID, value string) error {
 // AddExtensions Wraps AddExtension using a map of NID to text extension.
 // Will return without finishing if it encounters an error.
 func (c *Certificate) AddExtensions(extensions map[NID]string) error {
-	targetNid := NID_authority_key_identifier
+	targetNid := NidAuthorityKeyIdentifier
 	found := false
 	for nid, value := range extensions {
-		if nid == NID_authority_key_identifier {
+		if nid == NidAuthorityKeyIdentifier {
 			found = true
+
 			continue
 		}
 		if err := c.AddExtension(nid, value); err != nil {
@@ -384,18 +380,18 @@ func (c *Certificate) AddExtensions(extensions map[NID]string) error {
 }
 
 // LoadCertificateFromPEM loads an X509 certificate from a PEM-encoded block.
-func LoadCertificateFromPEM(pem_block []byte) (*Certificate, error) {
-	if len(pem_block) == 0 {
-		return nil, errors.New("empty pem block")
+func LoadCertificateFromPEM(pemBlock []byte) (*Certificate, error) {
+	if len(pemBlock) == 0 {
+		return nil, ErrNoCert
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	bio := C.BIO_new_mem_buf(unsafe.Pointer(&pem_block[0]),
-		C.int(len(pem_block)))
+
+	bio := C.BIO_new_mem_buf(unsafe.Pointer(&pemBlock[0]), C.int(len(pemBlock)))
 	cert := C.PEM_read_bio_X509(bio, nil, nil, nil)
 	C.BIO_free(bio)
 	if cert == nil {
-		return nil, ErrorFromErrorQueue()
+		return nil, PopError()
 	}
 	x := &Certificate{x: cert}
 	runtime.SetFinalizer(x, func(x *Certificate) {
@@ -405,23 +401,30 @@ func LoadCertificateFromPEM(pem_block []byte) (*Certificate, error) {
 }
 
 // MarshalPEM converts the X509 certificate to PEM-encoded format
-func (c *Certificate) MarshalPEM() (pem_block []byte, err error) {
+func (c *Certificate) MarshalPEM() ([]byte, error) {
 	bio := C.BIO_new(C.BIO_s_mem())
 	if bio == nil {
-		return nil, errors.New("failed to allocate memory BIO")
+		return nil, ErrMallocFailure
 	}
+
 	defer C.BIO_free(bio)
 	if int(C.PEM_write_bio_X509(bio, c.x)) != 1 {
-		return nil, errors.New("failed dumping certificate")
+		return nil, fmt.Errorf("failed to write certificate: %w", PopError())
 	}
-	return ioutil.ReadAll(asAnyBio(bio))
+
+	data, err := io.ReadAll(asAnyBio(bio))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read certificate: %w", err)
+	}
+
+	return data, nil
 }
 
 // PublicKey returns the public key embedded in the X509 certificate.
 func (c *Certificate) PublicKey() (PublicKey, error) {
 	pkey := C.X509_get_pubkey(c.x)
 	if pkey == nil {
-		return nil, errors.New("no public key found")
+		return nil, ErrNoPubKey
 	}
 	key := &pKey{key: pkey}
 	runtime.SetFinalizer(key, func(key *pKey) {
@@ -431,55 +434,57 @@ func (c *Certificate) PublicKey() (PublicKey, error) {
 }
 
 // GetSerialNumberHex returns the certificate's serial number in hex format
-func (c *Certificate) GetSerialNumberHex() (serial string) {
-	asn1_i := C.X509_get_serialNumber(c.x)
-	bignum := C.ASN1_INTEGER_to_BN(asn1_i, nil)
+func (c *Certificate) GetSerialNumberHex() string {
+	asn1Num := C.X509_get_serialNumber(c.x)
+	bignum := C.ASN1_INTEGER_to_BN(asn1Num, nil)
+	defer C.BN_free(bignum)
+
 	hex := C.BN_bn2hex(bignum)
-	serial = C.GoString(hex)
-	C.BN_free(bignum)
-	C.X_OPENSSL_free(unsafe.Pointer(hex))
-	return
+	defer C.X_OPENSSL_free(unsafe.Pointer(hex))
+
+	serial := C.GoString(hex)
+
+	return serial
 }
 
 // GetVersion returns the X509 version of the certificate.
-func (c *Certificate) GetVersion() X509_Version {
-	return X509_Version(C.X_X509_get_version(c.x))
+func (c *Certificate) GetVersion() X509Version {
+	return X509Version(C.X_X509_get_version(c.x))
 }
 
 // SetVersion sets the X509 version of the certificate.
-func (c *Certificate) SetVersion(version X509_Version) error {
+func (c *Certificate) SetVersion(version X509Version) error {
 	cvers := C.long(version)
 	if C.X_X509_set_version(c.x, cvers) != 1 {
-		return errors.New("failed to set certificate version")
+		return fmt.Errorf("failed to set certificate version: %w", PopError())
 	}
 	return nil
 }
 
-func getDigestFunction(digest EVP_MD) (md *C.EVP_MD) {
+func getDigestFunction(digest MDAlgo) *C.EVP_MD {
+	var md *C.EVP_MD
 	switch digest {
-	// please don't use these digest functions
-	case EVP_NULL:
+	case MDNull:
 		md = C.X_EVP_md_null()
-	case EVP_MD5:
+	case MDMD5:
 		md = C.X_EVP_md5()
-	case EVP_SHA:
+	case MDSHA:
 		md = C.X_EVP_sha()
-	case EVP_SHA1:
+	case MDSHA1:
 		md = C.X_EVP_sha1()
-	case EVP_DSS:
+	case MDDSS:
 		md = C.X_EVP_dss()
-	case EVP_DSS1:
+	case MDDSS1:
 		md = C.X_EVP_dss1()
-	case EVP_SHA224:
+	case MDSHA224:
 		md = C.X_EVP_sha224()
-	// you actually want one of these
-	case EVP_SHA256:
+	case MDSHA256:
 		md = C.X_EVP_sha256()
-	case EVP_SHA384:
+	case MDSHA384:
 		md = C.X_EVP_sha384()
-	case EVP_SHA512:
+	case MDSHA512:
 		md = C.X_EVP_sha512()
-	case EVP_SM3:
+	case MDSM3:
 		md = C.X_EVP_sm3()
 	}
 	return md
@@ -489,13 +494,13 @@ func getDigestFunction(digest EVP_MD) (md *C.EVP_MD) {
 func LoadPEMFromFile(filename string) ([]byte, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
 	pemBlock, err := io.ReadAll(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	return pemBlock, nil
@@ -505,13 +510,13 @@ func LoadPEMFromFile(filename string) ([]byte, error) {
 func SavePEMToFile(pemBlock []byte, filename string) error {
 	file, err := os.Create(filename)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create file: %w", err)
 	}
 	defer file.Close()
 
 	_, err = file.Write(pemBlock)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to write: %w", err)
 	}
 
 	return nil

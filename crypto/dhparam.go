@@ -18,7 +18,6 @@ package crypto
 import "C"
 
 import (
-	"errors"
 	"runtime"
 	"unsafe"
 )
@@ -33,20 +32,20 @@ func (dh *DH) GetDH() *C.DH {
 
 // LoadDHParametersFromPEM loads the Diffie-Hellman parameters from
 // a PEM-encoded block.
-func LoadDHParametersFromPEM(pem_block []byte) (*DH, error) {
-	if len(pem_block) == 0 {
-		return nil, errors.New("empty pem block")
+func LoadDHParametersFromPEM(pemBlock []byte) (*DH, error) {
+	if len(pemBlock) == 0 {
+		return nil, ErrNoCert
 	}
-	bio := C.BIO_new_mem_buf(unsafe.Pointer(&pem_block[0]),
-		C.int(len(pem_block)))
+	bio := C.BIO_new_mem_buf(unsafe.Pointer(&pemBlock[0]),
+		C.int(len(pemBlock)))
 	if bio == nil {
-		return nil, errors.New("failed creating bio")
+		return nil, ErrMallocFailure
 	}
 	defer C.BIO_free(bio)
 
 	params := C.PEM_read_bio_DHparams(bio, nil, nil, nil)
 	if params == nil {
-		return nil, errors.New("failed reading dh parameters")
+		return nil, PopError()
 	}
 	dhparams := &DH{dh: params}
 	runtime.SetFinalizer(dhparams, func(dhparams *DH) {

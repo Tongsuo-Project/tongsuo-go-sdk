@@ -26,11 +26,12 @@ func main() {
 	if _, err := h.Write([]byte("hello")); err != nil {
 		log.Fatal(err)
 	}
+
 	if _, err := h.Write([]byte(" world")); err != nil {
 		log.Fatal(err)
 	}
 
-	var res [sm3.SM3_DIGEST_LENGTH]byte
+	var res [sm3.MDSize]byte
 
 	fmt.Printf("SM3(%s)=%x\n", msg, h.Sum(res[:0]))
 }

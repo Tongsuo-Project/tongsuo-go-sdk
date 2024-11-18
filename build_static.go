@@ -17,8 +17,8 @@
 
 package tongsuogo
 
-// #cgo linux LDFLAGS: -extldflags -static -lssl -lcrypto
-// #cgo darwin LDFLAGS: -extldflags -static -lssl -lcrypto
+// #cgo linux LDFLAGS: -extldflags -static -lssl
+// #cgo darwin LDFLAGS: -extldflags -static -lssl
 // #cgo windows CFLAGS: -DWIN32_LEAN_AND_MEAN
-// #cgo windows pkg-config: libssl libcrypto
+// #cgo windows LDFLAGS: -extldflags -static -lssl
 import "C"

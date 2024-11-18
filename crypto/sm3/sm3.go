@@ -8,14 +8,10 @@
 package sm3
 
 // #include "../shim.h"
-// #cgo linux LDFLAGS: -lcrypto
-// #cgo darwin LDFLAGS: -lcrypto
-// #cgo windows CFLAGS: -DWIN32_LEAN_AND_MEAN
-// #cgo windows pkg-config: libcrypto
 import "C"
 
 import (
-	"errors"
+	"fmt"
 	"hash"
 	"runtime"
 	"unsafe"
@@ -24,8 +20,8 @@ import (
 )
 
 const (
-	SM3_DIGEST_LENGTH = 32
-	SM3_CBLOCK        = 64
+	MDSize    = 32
+	sm3Cblock = 64
 )
 
 var _ hash.Hash = new(SM3)
@@ -38,30 +34,32 @@ type SM3 struct {
 func New() (*SM3, error) { return NewWithEngine(nil) }
 
 func NewWithEngine(e *crypto.Engine) (*SM3, error) {
-	h, err := newWithEngine(e)
+	hash, err := newWithEngine(e)
 	if err != nil {
 		return nil, err
 	}
-	h.Reset()
-	return h, nil
+	hash.Reset()
+
+	return hash, nil
 }
 
 func newWithEngine(e *crypto.Engine) (*SM3, error) {
-	hash := &SM3{engine: e}
+	hash := &SM3{ctx: nil, engine: e}
 	hash.ctx = C.X_EVP_MD_CTX_new()
 	if hash.ctx == nil {
-		return nil, errors.New("openssl: sm3: unable to allocate ctx")
+		return nil, fmt.Errorf("failed to create md ctx: %w", crypto.ErrMallocFailure)
 	}
 	runtime.SetFinalizer(hash, func(hash *SM3) { hash.Close() })
+
 	return hash, nil
 }
 
 func (s *SM3) BlockSize() int {
-	return SM3_CBLOCK
+	return sm3Cblock
 }
 
 func (s *SM3) Size() int {
-	return SM3_DIGEST_LENGTH
+	return MDSize
 }
 
 func (s *SM3) Close() {
@@ -75,14 +73,14 @@ func (s *SM3) Reset() {
 	C.X_EVP_DigestInit_ex(s.ctx, C.EVP_sm3(), (*C.ENGINE)(s.engine.Engine()))
 }
 
-func (s *SM3) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
+func (s *SM3) Write(data []byte) (int, error) {
+	if len(data) == 0 {
 		return 0, nil
 	}
-	if 1 != C.X_EVP_DigestUpdate(s.ctx, unsafe.Pointer(&p[0]), C.size_t(len(p))) {
-		return 0, errors.New("openssl: sm3: cannot update digest")
+	if C.X_EVP_DigestUpdate(s.ctx, unsafe.Pointer(&data[0]), C.size_t(len(data))) != 1 {
+		return 0, fmt.Errorf("failed to update digest: %w", crypto.PopError())
 	}
-	return len(p), nil
+	return len(data), nil
 }
 
 func (s *SM3) Sum(in []byte) []byte {
@@ -99,19 +97,19 @@ func (s *SM3) Sum(in []byte) []byte {
 	return append(in, result[:]...)
 }
 
-func (s *SM3) checkSum() (result [SM3_DIGEST_LENGTH]byte) {
+func (s *SM3) checkSum() [MDSize]byte {
+	var result [MDSize]byte
+
 	C.X_EVP_DigestFinal_ex(s.ctx, (*C.uchar)(unsafe.Pointer(&result[0])), nil)
+
 	return result
 }
 
-func Sum(data []byte) (result [SM3_DIGEST_LENGTH]byte) {
-	C.X_EVP_Digest(
-		unsafe.Pointer(&data[0]),
-		C.size_t(len(data)),
-		(*C.uchar)(unsafe.Pointer(&result[0])),
-		nil,
-		C.EVP_sm3(),
-		nil,
-	)
-	return
+func Sum(data []byte) [MDSize]byte {
+	var result [MDSize]byte
+
+	C.X_EVP_Digest(unsafe.Pointer(&data[0]), C.size_t(len(data)), (*C.uchar)(unsafe.Pointer(&result[0])), nil,
+		C.EVP_sm3(), nil)
+
+	return result
 }

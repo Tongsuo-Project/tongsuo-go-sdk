@@ -14,13 +14,13 @@
 
 package crypto
 
+// #include <stdlib.h>
+import "C"
+
 import (
 	"sync"
 	"unsafe"
 )
-
-// #include <stdlib.h>
-import "C"
 
 type mapping struct {
 	lock   sync.Mutex

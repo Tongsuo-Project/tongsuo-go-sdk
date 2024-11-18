@@ -12,36 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tongsuogo
+package tongsuogo_test
 
 import (
 	"testing"
 	"time"
+
+	ts "github.com/tongsuo-project/tongsuo-go-sdk"
 )
 
 func TestCtxTimeoutOption(t *testing.T) {
-	ctx, _ := NewCtx()
+	t.Parallel()
+
+	ctx, _ := ts.NewCtx()
 	oldTimeout1 := ctx.GetTimeout()
 	newTimeout1 := oldTimeout1 + (time.Duration(99) * time.Second)
 	oldTimeout2 := ctx.SetTimeout(newTimeout1)
 	newTimeout2 := ctx.GetTimeout()
+
 	if oldTimeout1 != oldTimeout2 {
 		t.Error("SetTimeout() returns something undocumented")
 	}
+
 	if newTimeout1 != newTimeout2 {
 		t.Error("SetTimeout() does not save anything to ctx")
 	}
 }
 
 func TestCtxSessCacheSizeOption(t *testing.T) {
-	ctx, _ := NewCtx()
+	t.Parallel()
+
+	ctx, _ := ts.NewCtx()
 	oldSize1 := ctx.SessGetCacheSize()
 	newSize1 := oldSize1 + 42
 	oldSize2 := ctx.SessSetCacheSize(newSize1)
 	newSize2 := ctx.SessGetCacheSize()
+
 	if oldSize1 != oldSize2 {
 		t.Error("SessSetCacheSize() returns something undocumented")
 	}
+
 	if newSize1 != newSize2 {
 		t.Error("SessSetCacheSize() does not save anything to ctx")
 	}
