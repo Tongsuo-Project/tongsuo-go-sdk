@@ -35,7 +35,7 @@ jobs:
     - name: Build Tongsuo
       run: |
         cd Tongsuo
-        ./config --prefix=${RUNNER_TEMP}/tongsuo --libdir=${RUNNER_TEMP}/tongsuo/lib enable-ntls
+        ./config --prefix=${RUNNER_TEMP}/tongsuo --libdir=${RUNNER_TEMP}/tongsuo/lib enable-ntls enable-export-sm4
         make -j4
         make install
 
@@ -69,7 +69,7 @@ jobs:
     - name: Build Tongsuo
       run: |
         cd Tongsuo
-        ./config --prefix=${RUNNER_TEMP}/tongsuo --libdir=${RUNNER_TEMP}/tongsuo/lib enable-ntls
+        ./config --prefix=${RUNNER_TEMP}/tongsuo --libdir=${RUNNER_TEMP}/tongsuo/lib enable-ntls enable-export-sm4
         make -j4
         make install
 
@@ -108,7 +108,7 @@ jobs:
     - name: Build Tongsuo Static
       run: |
         cd tongsuo
-        ./config --prefix=${RUNNER_TEMP}/tongsuo --libdir=${RUNNER_TEMP}/tongsuo/lib enable-ntls no-shared
+        ./config --prefix=${RUNNER_TEMP}/tongsuo --libdir=${RUNNER_TEMP}/tongsuo/lib enable-ntls enable-export-sm4 no-shared
         make -j4
         make install
 
@@ -147,7 +147,7 @@ jobs:
       run: |
         mkdir _build
         cd _build
-        perl ..\Configure VC-WIN64A no-makedepend --prefix=%RUNNER_TEMP%\tongsuo enable-ntls
+        perl ..\Configure VC-WIN64A no-makedepend --prefix=%RUNNER_TEMP%\tongsuo enable-ntls enable-export-sm4
         nmake /S
         nmake install
       working-directory: Tongsuo

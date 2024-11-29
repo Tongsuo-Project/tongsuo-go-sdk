@@ -22,7 +22,7 @@ cd Tongsuo
 
 git checkout 8.3-stable
 
-./config --prefix=/opt/tongsuo --libdir=/opt/tongsuo/lib enable-ntls
+./config --prefix=/opt/tongsuo --libdir=/opt/tongsuo/lib enable-ntls enable-export-sm4
 make -j
 make install
 ```
