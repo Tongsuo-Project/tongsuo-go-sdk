@@ -9,11 +9,11 @@ package main
 
 import (
 	"bytes"
+	"crypto/cipher"
 	"encoding/hex"
 	"fmt"
 	"log"
 
-	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto/sm4"
 )
 
@@ -23,20 +23,18 @@ func sm4CBCEncrypt() {
 	plainText, _ := hex.DecodeString("0123456789ABCDEFFEDCBA98765432100123456789ABCDEFFEDCBA9876543210")
 	cipherText, _ := hex.DecodeString("2677F46B09C122CC975533105BD4A22AF6125F7275CE552C3A2BBCF533DE8A3B")
 
-	enc, err := sm4.NewEncrypter(crypto.CipherModeCBC, key, iv)
+	block, err := sm4.NewCipher(key)
 	if err != nil {
-		log.Fatal("failed to create encrypter: ", err)
+		log.Fatal("failed to create SM4 cipher: ", err)
 	}
 
-	enc.SetPadding(false)
+	cipherText1 := make([]byte, len(plainText))
 
-	actualCipherText, err := enc.EncryptAll(plainText)
-	if err != nil {
-		log.Fatal("failed to encrypt: ", err)
-	}
+	stream := cipher.NewCBCEncrypter(block, iv)
+	stream.CryptBlocks(cipherText1, plainText)
 
-	if !bytes.Equal(cipherText, actualCipherText) {
-		log.Fatalf("exp:%x got:%x", cipherText, actualCipherText)
+	if !bytes.Equal(cipherText1, cipherText) {
+		log.Fatalf("exp:%x got:%x", cipherText, cipherText1)
 	}
 
 	fmt.Println("[sm4CBCEncrypt]")
@@ -52,20 +50,18 @@ func sm4CBCDecrypt() {
 	plainText, _ := hex.DecodeString("0123456789ABCDEFFEDCBA98765432100123456789ABCDEFFEDCBA9876543210")
 	cipherText, _ := hex.DecodeString("2677F46B09C122CC975533105BD4A22AF6125F7275CE552C3A2BBCF533DE8A3B")
 
-	enc, err := sm4.NewDecrypter(crypto.CipherModeCBC, key, iv)
+	block, err := sm4.NewCipher(key)
 	if err != nil {
-		log.Fatal("failed to create decrypter: ", err)
+		log.Fatal("failed to create SM4 cipher: ", err)
 	}
 
-	enc.SetPadding(false)
+	plainText1 := make([]byte, len(cipherText))
 
-	actualPlainText, err := enc.DecryptAll(cipherText)
-	if err != nil {
-		log.Fatal("failed to decrypt: ", err)
-	}
+	stream := cipher.NewCBCDecrypter(block, iv)
+	stream.CryptBlocks(plainText1, cipherText)
 
-	if !bytes.Equal(plainText, actualPlainText) {
-		log.Fatalf("exp:%x got:%x", plainText, actualPlainText)
+	if !bytes.Equal(plainText, plainText1) {
+		log.Fatalf("exp:%x got:%x", plainText, plainText1)
 	}
 
 	fmt.Println("[sm4CBCDecrypt]")
@@ -83,29 +79,20 @@ func sm4GCMEncrypt() {
 	plainText, _ := hex.DecodeString("AAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDEEEEEEEEEEEEEEEEFFFFFFFFFFFFFFFFEEEEEEEEEEEEEEEEAAAAAAAAAAAAAAAA")
 	cipherText, _ := hex.DecodeString("17F399F08C67D5EE19D0DC9969C4BB7D5FD46FD3756489069157B282BB200735D82710CA5C22F0CCFA7CBF93D496AC15A56834CBCF98C397B4024A2691233B8D")
 
-	enc, err := sm4.NewEncrypter(crypto.CipherModeGCM, key, iv)
+	block, err := sm4.NewCipher(key)
 	if err != nil {
-		log.Fatal("failed to create encrypter: ", err)
+		log.Fatal("failed to create SM4 cipher: ", err)
 	}
 
-	enc.SetAAD(aad)
-
-	actualCipherText, err := enc.EncryptAll(plainText)
+	stream, err := cipher.NewGCM(block)
 	if err != nil {
-		log.Fatal("failed to encrypt: ", err)
+		log.Fatal("failed to create GCM: ", err)
 	}
 
-	if !bytes.Equal(cipherText, actualCipherText) {
-		log.Fatalf("exp:%x got:%x", cipherText, actualCipherText)
-	}
+	cipherText1 := stream.Seal(nil, iv, plainText, aad)
 
-	actualTag, err := enc.GetTag()
-	if err != nil {
-		log.Fatal("failed to get tag: ", err)
-	}
-
-	if !bytes.Equal(tag, actualTag) {
-		log.Fatalf("exp:%x got:%x", tag, actualTag)
+	if !bytes.Equal(cipherText1, append(cipherText, tag...)) {
+		log.Fatalf("exp:%x got:%x", cipherText1, append(cipherText, tag...))
 	}
 
 	fmt.Println("[sm4GCMEncrypt]")
@@ -125,21 +112,23 @@ func sm4GCMDecrypt() {
 	plainText, _ := hex.DecodeString("AAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDEEEEEEEEEEEEEEEEFFFFFFFFFFFFFFFFEEEEEEEEEEEEEEEEAAAAAAAAAAAAAAAA")
 	cipherText, _ := hex.DecodeString("17F399F08C67D5EE19D0DC9969C4BB7D5FD46FD3756489069157B282BB200735D82710CA5C22F0CCFA7CBF93D496AC15A56834CBCF98C397B4024A2691233B8D")
 
-	dec, err := sm4.NewDecrypter(crypto.CipherModeGCM, key, iv)
+	block, err := sm4.NewCipher(key)
 	if err != nil {
-		log.Fatal("failed to create decrypter: ", err)
+		log.Fatal("failed to create SM4 cipher: ", err)
 	}
 
-	dec.SetTag(tag)
-	dec.SetAAD(aad)
+	stream, err := cipher.NewGCM(block)
+	if err != nil {
+		log.Fatal("failed to create GCM: ", err)
+	}
 
-	actualPlainText, err := dec.DecryptAll(cipherText)
+	plainText1, err := stream.Open(nil, iv, append(cipherText, tag...), aad)
 	if err != nil {
 		log.Fatal("failed to decrypt: ", err)
 	}
 
-	if !bytes.Equal(plainText, actualPlainText) {
-		log.Fatalf("exp:%x got:%x", plainText, actualPlainText)
+	if !bytes.Equal(plainText1, plainText) {
+		log.Fatalf("exp:%x got:%x", plainText1, plainText)
 	}
 
 	fmt.Println("[sm4GCMDecrypt]")

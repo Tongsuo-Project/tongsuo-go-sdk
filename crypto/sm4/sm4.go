@@ -12,9 +12,16 @@ import "C"
 
 import (
 	"bytes"
+	"crypto/cipher"
 	"fmt"
+	"unsafe"
 
 	"github.com/tongsuo-project/tongsuo-go-sdk/crypto"
+)
+
+const (
+	BlockSize = 16
+	KeySize   = 16
 )
 
 type Encrypter interface {
@@ -48,6 +55,50 @@ type sm4Decrypter struct {
 	iv   []byte
 	aad  []byte
 	tag  []byte
+}
+
+type sm4Cipher struct {
+	rk [32]uint32
+}
+
+func (c *sm4Cipher) BlockSize() int {
+	return BlockSize
+}
+
+func NewCipher(key []byte) (cipher.Block, error) {
+	if len(key) != KeySize {
+		return nil, fmt.Errorf("invalid key size: %w", crypto.ErrInvalidKeySize)
+	}
+
+	cipher := &sm4Cipher{}
+	ret := C.SM4_set_key((*C.uchar)(&key[0]), (*C.SM4_KEY)(unsafe.Pointer(&cipher.rk)))
+	if ret != 1 {
+		return nil, fmt.Errorf("failed to set key: %w", crypto.ErrInternalError)
+	}
+
+	return cipher, nil
+}
+
+func (c *sm4Cipher) Encrypt(dst, src []byte) {
+	if len(src) < BlockSize {
+		panic("sm4: input not full block")
+	}
+	if len(dst) < BlockSize {
+		panic("sm4: output not full block")
+	}
+
+	C.SM4_encrypt((*C.uchar)(&src[0]), (*C.uchar)(&dst[0]), (*C.SM4_KEY)(unsafe.Pointer(&c.rk)))
+}
+
+func (c *sm4Cipher) Decrypt(dst, src []byte) {
+	if len(src) < BlockSize {
+		panic("sm4: input not full block")
+	}
+	if len(dst) < BlockSize {
+		panic("sm4: output not full block")
+	}
+
+	C.SM4_decrypt((*C.uchar)(&src[0]), (*C.uchar)(&dst[0]), (*C.SM4_KEY)(unsafe.Pointer(&c.rk)))
 }
 
 func getSM4Cipher(mode int) (*crypto.Cipher, error) {

@@ -48,6 +48,7 @@ var (
 	ErrInternalError       = errors.New("internal error")
 	ErrEmptyKey            = errors.New("empty key")
 	ErrNoData              = errors.New("no data")
+	ErrInvalidKeySize      = errors.New("invalid key size")
 )
 
 func init() {
