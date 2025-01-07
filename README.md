@@ -1,17 +1,19 @@
-# tongsuo-go-sdk
+# Tongsuo-Go-SDK
 
-Tongsuo bindings for Go.
+Tongsuo-Go-SDK uses Tongsuo to provide cryptographic primitives and secure transport protocols for
+golang applications.
 
-## Feature
+## Features
 
-- Symmetric algorithms: SM4
-- Digital signature algorithms: SM2withSM3
 - Hash algorithms: SM3, MD5, SHA1, SHA256
-- Secure transport protocol: TLCP, TLSv1.0/1.1/1.2/1.3
+- Symmetric algorithms: SM4
+- SM2 keygen, encryption and decryption
+- Digital signature algorithm: SM2withSM3
+- Message Authentication Code: HMAC
+- Support issuing SM2 certificate
+- Secure transport protocols: TLCP, TLSv1.0/1.1/1.2/1.3
 
-## quick start
-
-### Install Tongsuo
+## Installation
 
 tongsuo-go-sdk is based on Tongsuo, so we must install Tongsuo firstly.
 Build and install Tongsuo from source code is as follows:
@@ -27,23 +29,13 @@ make -j
 make install
 ```
 
-### Test tongsuo-go-sdk
-
-On Linux:
+Then install tongsuo-go-sdk:
 
 ```bash
-TONGSUO_HOME=/opt/tongsuo
-LD_LIBRARY_PATH=${TONGSUO_HOME}/lib CGO_CFLAGS="-I${TONGSUO_HOME}/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${TONGSUO_HOME}/lib" go test ./...
+go get github.com/Tongsuo-Project/tongsuo-go-sdk
 ```
 
-On MacOS:
-
-```bash
-TONGSUO_HOME=/opt/tongsuo
-DYLD_LIBRARY_PATH=${TONGSUO_HOME}/lib CGO_CFLAGS="-I${TONGSUO_HOME}/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${TONGSUO_HOME}/lib" go test ./...
-```
-
-### Run example
+### Run examples
 
 On Linux:
 
@@ -57,4 +49,20 @@ On MacOS:
 ```bash
 TONGSUO_HOME=/opt/tongsuo
 DYLD_LIBRARY_PATH=${TONGSUO_HOME}/lib CGO_CFLAGS="-I${TONGSUO_HOME}/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${TONGSUO_HOME}/lib" go run examples/sm4/main.go
+```
+
+### Run tests
+
+On Linux:
+
+```bash
+TONGSUO_HOME=/opt/tongsuo
+LD_LIBRARY_PATH=${TONGSUO_HOME}/lib CGO_CFLAGS="-I${TONGSUO_HOME}/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${TONGSUO_HOME}/lib" go test ./...
+```
+
+On MacOS:
+
+```bash
+TONGSUO_HOME=/opt/tongsuo
+DYLD_LIBRARY_PATH=${TONGSUO_HOME}/lib CGO_CFLAGS="-I${TONGSUO_HOME}/include -Wno-deprecated-declarations" CGO_LDFLAGS="-L${TONGSUO_HOME}/lib" go test ./...
 ```
