@@ -27,23 +27,23 @@ import (
 	"unsafe"
 )
 
-type MDAlgo int
+type DigestAlgo int
 
 const (
-	MDNull      MDAlgo = iota
-	MDMD5       MDAlgo = iota
-	MDMD4       MDAlgo = iota
-	MDSHA       MDAlgo = iota
-	MDSHA1      MDAlgo = iota
-	MDDSS       MDAlgo = iota
-	MDDSS1      MDAlgo = iota
-	MDMDC2      MDAlgo = iota
-	MDRipemd160 MDAlgo = iota
-	MDSHA224    MDAlgo = iota
-	MDSHA256    MDAlgo = iota
-	MDSHA384    MDAlgo = iota
-	MDSHA512    MDAlgo = iota
-	MDSM3       MDAlgo = iota
+	DigestNull      DigestAlgo = iota
+	DigestMD5       DigestAlgo = iota
+	DigestMD4       DigestAlgo = iota
+	DigestSHA       DigestAlgo = iota
+	DigestSHA1      DigestAlgo = iota
+	DigestDSS       DigestAlgo = iota
+	DigestDSS1      DigestAlgo = iota
+	DigestMDC2      DigestAlgo = iota
+	DigestRipemd160 DigestAlgo = iota
+	DigestSHA224    DigestAlgo = iota
+	DigestSHA256    DigestAlgo = iota
+	DigestSHA384    DigestAlgo = iota
+	DigestSHA512    DigestAlgo = iota
+	DigestSM3       DigestAlgo = iota
 )
 
 type GMDoubleCertKey struct {
@@ -289,19 +289,19 @@ func (c *Certificate) SetPubKey(pubKey PublicKey) error {
 
 // Sign a certificate using a private key and a digest name.
 // Accepted digest names are 'sm3', 'sha256', 'sha384', and 'sha512'.
-func (c *Certificate) Sign(privKey PrivateKey, digest MDAlgo) error {
+func (c *Certificate) Sign(privKey PrivateKey, digest DigestAlgo) error {
 	switch digest {
-	case MDSM3:
-	case MDSHA256:
-	case MDSHA384:
-	case MDSHA512:
+	case DigestSM3:
+	case DigestSHA256:
+	case DigestSHA384:
+	case DigestSHA512:
 	default:
 		return ErrUnsupportedDigest
 	}
 	return c.insecureSign(privKey, digest)
 }
 
-func (c *Certificate) insecureSign(privKey PrivateKey, digest MDAlgo) error {
+func (c *Certificate) insecureSign(privKey PrivateKey, digest DigestAlgo) error {
 	var md *C.EVP_MD = getDigestFunction(digest)
 	if C.X509_sign(c.x, privKey.EvpPKey(), md) <= 0 {
 		return fmt.Errorf("failed to sign certificate: %w", PopError())
@@ -461,30 +461,30 @@ func (c *Certificate) SetVersion(version X509Version) error {
 	return nil
 }
 
-func getDigestFunction(digest MDAlgo) *C.EVP_MD {
+func getDigestFunction(digest DigestAlgo) *C.EVP_MD {
 	var md *C.EVP_MD
 	switch digest {
-	case MDNull:
+	case DigestNull:
 		md = C.X_EVP_md_null()
-	case MDMD5:
+	case DigestMD5:
 		md = C.X_EVP_md5()
-	case MDSHA:
+	case DigestSHA:
 		md = C.X_EVP_sha()
-	case MDSHA1:
+	case DigestSHA1:
 		md = C.X_EVP_sha1()
-	case MDDSS:
+	case DigestDSS:
 		md = C.X_EVP_dss()
-	case MDDSS1:
+	case DigestDSS1:
 		md = C.X_EVP_dss1()
-	case MDSHA224:
+	case DigestSHA224:
 		md = C.X_EVP_sha224()
-	case MDSHA256:
+	case DigestSHA256:
 		md = C.X_EVP_sha256()
-	case MDSHA384:
+	case DigestSHA384:
 		md = C.X_EVP_sha384()
-	case MDSHA512:
+	case DigestSHA512:
 		md = C.X_EVP_sha512()
-	case MDSM3:
+	case DigestSM3:
 		md = C.X_EVP_sm3()
 	}
 	return md

@@ -48,7 +48,7 @@ func main() {
 
 	// Helper function: sign and save certificate
 	signAndSaveCert := func(cert *crypto.Certificate, caKey crypto.PrivateKey, filename string) {
-		err := cert.Sign(caKey, crypto.MDSM3)
+		err := cert.Sign(caKey, crypto.DigestSM3)
 		if err != nil {
 			panic(err)
 		}
