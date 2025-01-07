@@ -69,7 +69,7 @@ func TestCAGenerateSM2AndNTLS(t *testing.T) {
 	})
 
 	signAndSaveCert := func(cert *crypto.Certificate, caKey crypto.PrivateKey, filename string) {
-		err := cert.Sign(caKey, crypto.MDSM3)
+		err := cert.Sign(caKey, crypto.DigestSM3)
 		if err != nil {
 			t.Fatal(err)
 		}

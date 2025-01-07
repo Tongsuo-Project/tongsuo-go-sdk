@@ -46,7 +46,7 @@ func TestCertGenerate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cert.Sign(key, crypto.MDSHA256); err != nil {
+	if err := cert.Sign(key, crypto.DigestSHA256); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -73,7 +73,7 @@ func TestCertGenerateSM2(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cert.Sign(key, crypto.MDSM3); err != nil {
+	if err := cert.Sign(key, crypto.DigestSM3); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -109,7 +109,7 @@ func TestCAGenerate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := ca.Sign(cakey, crypto.MDSHA256); err != nil {
+	if err := ca.Sign(cakey, crypto.DigestSHA256); err != nil {
 		t.Fatal(err)
 	}
 
@@ -144,7 +144,7 @@ func TestCAGenerate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cert.Sign(cakey, crypto.MDSHA256); err != nil {
+	if err := cert.Sign(cakey, crypto.DigestSHA256); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -186,7 +186,7 @@ func TestCAGenerateSM2(t *testing.T) {
 	}
 
 	signAndSaveCert := func(cert *crypto.Certificate, caKey crypto.PrivateKey, filename string) {
-		err := cert.Sign(caKey, crypto.MDSM3)
+		err := cert.Sign(caKey, crypto.DigestSM3)
 		if err != nil {
 			t.Fatal(err)
 		}

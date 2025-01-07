@@ -29,7 +29,7 @@ func TestSHA256HMAC(t *testing.T) {
 	key := []byte("d741787cc61851af045ccd37")
 	data := []byte("5912EEFD-59EC-43E3-ADB8-D5325AEC3271")
 
-	tsHmac, err := crypto.NewHMAC(key, crypto.MDSHA256)
+	tsHmac, err := crypto.NewHMAC(key, crypto.DigestSHA256)
 	if err != nil {
 		t.Fatalf("Unable to create new HMAC: %s", err)
 	}
@@ -60,7 +60,7 @@ func BenchmarkSHA256HMAC(b *testing.B) {
 	key := []byte("d741787cc61851af045ccd37")
 	data := []byte("5912EEFD-59EC-43E3-ADB8-D5325AEC3271")
 
-	tsHmac, err := crypto.NewHMAC(key, crypto.MDSHA256)
+	tsHmac, err := crypto.NewHMAC(key, crypto.DigestSHA256)
 	if err != nil {
 		b.Fatalf("Unable to create new HMAC: %s", err)
 	}
