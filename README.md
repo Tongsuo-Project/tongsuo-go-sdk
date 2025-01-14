@@ -32,7 +32,7 @@ make install
 Then install tongsuo-go-sdk:
 
 ```bash
-go get github.com/Tongsuo-Project/tongsuo-go-sdk
+go get github.com/tongsuo-project/tongsuo-go-sdk
 ```
 
 ### Run examples
